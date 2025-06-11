@@ -1,3 +1,10 @@
+//
+//  ContentView.swift
+//  afm-chat
+//
+//  Created by dangered wolf on 6/10/25.
+//
+
 import SwiftUI
 import FoundationModels
 
