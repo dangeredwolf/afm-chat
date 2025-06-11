@@ -1,6 +1,6 @@
-# Apple Foundation Model Chat
+# AFM Chat
 
-Chat with the on-device LLM introduced in iOS 26. Build using Xcode 26 or later.
+Chat with the on-device Apple Foundation Models LLM introduced in iOS 26. Build using Xcode 26 or later.
 
 
 
