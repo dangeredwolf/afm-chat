@@ -17,16 +17,7 @@ struct ChatView: View {
     @State private var isLoading: Bool = false
     @FocusState private var isInputFocused: Bool
     
-    // Configuration options
-    let showSettings: Bool
-    let showClearButton: Bool
-    let navigationTitle: String
-    
-    init(showSettings: Bool = true, showClearButton: Bool = true, navigationTitle: String = "AFM Chat") {
-        self.showSettings = showSettings
-        self.showClearButton = showClearButton
-        self.navigationTitle = navigationTitle
-        
+    init() {
         let savedPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
         _session = State(initialValue: LanguageModelSession(instructions: savedPrompt))
     }
@@ -83,7 +74,7 @@ struct ChatView: View {
             }
             .padding()
         }
-        .navigationTitle(navigationTitle)
+        .navigationTitle("AFM Chat")
     }
     
     private func sendMessage() {
@@ -113,7 +104,7 @@ struct ChatView: View {
             } catch {
                 await MainActor.run {
                     // Add error message
-                    let errorMessage = ChatMessage(content: "Sorry, I encountered an error: \(error.localizedDescription)", isUser: false)
+                    let errorMessage = ChatMessage(content: "Error calling FoundationModel: \(error.localizedDescription)", isUser: false)
                     messages.append(errorMessage)
                     isLoading = false
                 }

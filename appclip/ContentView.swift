@@ -9,13 +9,11 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        NavigationView {
-            ChatView(
-                showSettings: true,
-                showClearButton: true,
-                navigationTitle: "AFM Chat"
-            )
-        }
+        ChatContainerView(
+            showSettings: true,
+            showClearButton: true,
+            navigationTitle: "AFM Chat"
+        )
     }
 }
 

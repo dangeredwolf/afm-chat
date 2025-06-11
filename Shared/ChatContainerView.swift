@@ -11,32 +11,17 @@ struct ChatContainerView: View {
     @State private var showingSettings: Bool = false
     @State private var chatView = ChatView()
     
-    // Configuration options
-    let showSettings: Bool
-    let showClearButton: Bool
-    let navigationTitle: String
-    
-    init(showSettings: Bool = true, showClearButton: Bool = true, navigationTitle: String = "AFM Chat") {
-        self.showSettings = showSettings
-        self.showClearButton = showClearButton
-        self.navigationTitle = navigationTitle
-    }
-    
     var body: some View {
         NavigationView {
             chatView
                 .toolbar {
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        if showSettings {
-                            Button(action: { showingSettings = true }) {
-                                Image(systemName: "gear")
-                            }
+                        Button(action: { showingSettings = true }) {
+                            Image(systemName: "gear")
                         }
-                        
-                        if showClearButton {
-                            Button(action: chatView.clearChat) {
-                                Image(systemName: "trash")
-                            }
+                    
+                        Button(action: chatView.clearChat) {
+                            Image(systemName: "trash")
                         }
                     }
                 }
