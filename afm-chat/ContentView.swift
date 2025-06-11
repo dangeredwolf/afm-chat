@@ -12,7 +12,7 @@ struct ContentView: View {
         ChatContainerView(
             showSettings: true,
             showClearButton: true,
-            navigationTitle: "FM Chat"
+            navigationTitle: "AFM Chat"
         )
     }
 }
