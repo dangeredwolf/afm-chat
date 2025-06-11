@@ -19,6 +19,7 @@ struct ChatView: View {
     
     init() {
         let savedPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
+        _systemPrompt = State(initialValue: savedPrompt)
         _session = State(initialValue: LanguageModelSession(instructions: savedPrompt))
     }
     

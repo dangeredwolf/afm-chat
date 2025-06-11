@@ -13,6 +13,8 @@ struct SettingsView: View {
     @State private var tempPrompt: String = ""
     let onSave: () -> Void
     
+    private let defaultPrompt = "You are a helpful assistant."
+    
     var body: some View {
         NavigationView {
             Form {
@@ -27,6 +29,11 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
+                    
+                    Button("Reset to Default") {
+                        tempPrompt = defaultPrompt
+                    }
+                    .foregroundColor(.blue)
                 }
             }
             .navigationTitle("Settings")
