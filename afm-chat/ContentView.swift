@@ -9,14 +9,19 @@ import SwiftUI
 import FoundationModels
 
 struct ContentView: View {
-    @State private var session = LanguageModelSession(
-        instructions: "You are a helpful assistant."
-    )
+    @State private var systemPrompt: String = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
+    @State private var session: LanguageModelSession
     
     @State private var messages: [ChatMessage] = []
     @State private var inputText: String = ""
     @State private var isLoading: Bool = false
+    @State private var showingSettings: Bool = false
     @FocusState private var isInputFocused: Bool
+    
+    init() {
+        let savedPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
+        _session = State(initialValue: LanguageModelSession(instructions: savedPrompt))
+    }
     
     var body: some View {
         NavigationView {
@@ -71,12 +76,19 @@ struct ContentView: View {
             }
             .navigationTitle("FM Chat")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button(action: { showingSettings = true }) {
+                        Image(systemName: "gear")
+                    }
+                    
                     Button(action: clearChat) {
                         Image(systemName: "trash")
                     }
                     .disabled(messages.isEmpty)
                 }
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView(systemPrompt: $systemPrompt, onSave: updateSession)
             }
         }
     }
@@ -121,12 +133,87 @@ struct ContentView: View {
         messages.removeAll()
         
         // Create a new session to start fresh
-        session = LanguageModelSession(
-            instructions: "You are a helpful assistant."
-        )
+        session = LanguageModelSession(instructions: systemPrompt)
         
         // Dismiss keyboard if it's visible
         isInputFocused = false
+    }
+    
+    private func updateSession() {
+        // Save to UserDefaults
+        UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
+        
+        // Create new session with updated prompt
+        session = LanguageModelSession(instructions: systemPrompt)
+    }
+}
+
+struct SettingsView: View {
+    @Binding var systemPrompt: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var tempPrompt: String = ""
+    let onSave: () -> Void
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("System Prompt")) {
+                    Text("Customize how the AI assistant behaves by modifying the system prompt below:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    TextEditor(text: $tempPrompt)
+                        .frame(minHeight: 120)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        systemPrompt = tempPrompt
+                        onSave()
+                        dismiss()
+                    }
+                    .disabled(tempPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .onAppear {
+            tempPrompt = systemPrompt
+        }
+    }
+}
+
+struct PromptPresetButton: View {
+    let title: String
+    let prompt: String
+    @Binding var tempPrompt: String
+    
+    var body: some View {
+        Button(action: {
+            tempPrompt = prompt
+        }) {
+            HStack {
+                Text(title)
+                    .foregroundColor(.primary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
