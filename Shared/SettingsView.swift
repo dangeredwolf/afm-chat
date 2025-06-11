@@ -9,8 +9,10 @@ import SwiftUI
 
 struct SettingsView: View {
     @Binding var systemPrompt: String
+    @Binding var temperature: Double
     @Environment(\.dismiss) private var dismiss
     @State private var tempPrompt: String = ""
+    @State private var tempTemperature: Double = 1.0
     let onSave: () -> Void
     
     private let defaultPrompt = "You are a helpful assistant."
@@ -35,6 +37,34 @@ struct SettingsView: View {
                     }
                     .foregroundColor(.blue)
                 }
+                
+                Section(header: Text("Temperature")) {
+                    Text("Controls randomness in responses. Lower values (0.0) make responses more focused and deterministic, while higher values (2.0) make them more creative and varied.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Temperature: \(tempTemperature, specifier: "%.1f")")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                        }
+                        
+                        Slider(value: $tempTemperature, in: 0.0...2.0, step: 0.1) {
+                            Text("Temperature")
+                        } minimumValueLabel: {
+                            Text("0.0")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } maximumValueLabel: {
+                            Text("2.0")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -48,6 +78,7 @@ struct SettingsView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         systemPrompt = tempPrompt
+                        temperature = tempTemperature
                         onSave()
                         dismiss()
                     }
@@ -57,6 +88,7 @@ struct SettingsView: View {
         }
         .onAppear {
             tempPrompt = systemPrompt
+            tempTemperature = temperature
         }
     }
 }

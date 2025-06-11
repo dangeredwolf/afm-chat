@@ -17,6 +17,12 @@ class ChatManager: ObservableObject {
         }
     }
     
+    @Published var temperature: Double {
+        didSet {
+            UserDefaults.standard.set(temperature, forKey: "temperature")
+        }
+    }
+    
     @Published var messages: [ChatMessage] = []
     @Published var inputText: String = ""
     @Published var isLoading: Bool = false
@@ -25,7 +31,10 @@ class ChatManager: ObservableObject {
     
     init() {
         let savedPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
+        let savedTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
+        
         self.systemPrompt = savedPrompt
+        self.temperature = savedTemperature
         self.session = LanguageModelSession(instructions: savedPrompt)
     }
     
@@ -44,7 +53,8 @@ class ChatManager: ObservableObject {
         // Send to LLM
         Task {
             do {
-                let response = try await session.respond(to: userMessage)
+                let generationOptions = GenerationOptions(temperature: temperature)
+                let response = try await session.respond(to: userMessage, options: generationOptions)
                 
                 await MainActor.run {
                     // Add AI response
@@ -65,7 +75,7 @@ class ChatManager: ObservableObject {
     
     func clearChat() {
         messages.removeAll()
-        session = LanguageModelSession(instructions: systemPrompt)
+        updateSession()
     }
     
     private func updateSession() {

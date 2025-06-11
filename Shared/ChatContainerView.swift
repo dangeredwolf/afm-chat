@@ -28,6 +28,7 @@ struct ChatContainerView: View {
                 .sheet(isPresented: $showingSettings) {
                     SettingsView(
                         systemPrompt: $chatManager.systemPrompt,
+                        temperature: $chatManager.temperature,
                         onSave: { }
                     )
                 }
