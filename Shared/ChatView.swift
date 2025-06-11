@@ -9,18 +9,11 @@ import SwiftUI
 import FoundationModels
 
 struct ChatView: View {
-    @State private var systemPrompt: String = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
-    @State private var session: LanguageModelSession
-    
-    @State private var messages: [ChatMessage] = []
-    @State private var inputText: String = ""
-    @State private var isLoading: Bool = false
+    @StateObject var chatManager: ChatManager
     @FocusState private var isInputFocused: Bool
     
-    init() {
-        let savedPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
-        _systemPrompt = State(initialValue: savedPrompt)
-        _session = State(initialValue: LanguageModelSession(instructions: savedPrompt))
+    init(chatManager: ChatManager = ChatManager()) {
+        _chatManager = StateObject(wrappedValue: chatManager)
     }
     
     var body: some View {
@@ -29,16 +22,16 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(messages) { message in
+                        ForEach(chatManager.messages) { message in
                             ChatBubble(message: message)
                                 .id(message.id)
                         }
                     }
                     .padding()
                 }
-                .onChange(of: messages.count) { _ in
+                .onChange(of: chatManager.messages.count) { _ in
                     // Auto-scroll to bottom when new messages are added
-                    if let lastMessage = messages.last {
+                    if let lastMessage = chatManager.messages.last {
                         withAnimation(.easeOut(duration: 0.3)) {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
                         }
@@ -52,94 +45,35 @@ struct ChatView: View {
             
             // Input area
             HStack {
-                TextField("Type your message...", text: $inputText, axis: .vertical)
+                TextField("Type your message...", text: $chatManager.inputText, axis: .vertical)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .lineLimit(1...4)
-                    .disabled(isLoading)
+                    .disabled(chatManager.isLoading)
                     .focused($isInputFocused)
                     .padding(.vertical, 4)
                     .padding(.horizontal, 8)
                     .onSubmit {
-                        sendMessage()
+                        chatManager.sendMessage()
+                        isInputFocused = false
                     }
                 
-                Button(action: sendMessage) {
-                    if isLoading {
+                Button(action: {
+                    chatManager.sendMessage()
+                    isInputFocused = false
+                }) {
+                    if chatManager.isLoading {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
                         Image(systemName: "paperplane.fill")
                     }
                 }
-                .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                .disabled(chatManager.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || chatManager.isLoading)
             }
             .padding()
         }
         .navigationTitle("AFM Chat")
     }
     
-    private func sendMessage() {
-        let userMessage = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !userMessage.isEmpty else { return }
-        
-        // Add user message
-        let userChatMessage = ChatMessage(content: userMessage, isUser: true)
-        messages.append(userChatMessage)
-        
-        // Clear input, dismiss keyboard, and set loading state
-        inputText = ""
-        isInputFocused = false
-        isLoading = true
-        
-        // Send to LLM
-        Task {
-            do {
-                let response = try await session.respond(to: userMessage)
-                
-                await MainActor.run {
-                    // Add AI response
-                    let aiMessage = ChatMessage(content: response.content, isUser: false)
-                    messages.append(aiMessage)
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    // Add error message
-                    let errorMessage = ChatMessage(content: "Error calling FoundationModel: \(error.localizedDescription)", isUser: false)
-                    messages.append(errorMessage)
-                    isLoading = false
-                }
-            }
-        }
-    }
-    
-    func clearChat() {
-        // Clear messages
-        messages.removeAll()
-        
-        // Create a new session to start fresh
-        session = LanguageModelSession(instructions: systemPrompt)
-        
-        // Dismiss keyboard if it's visible
-        isInputFocused = false
-    }
-    
-    func updateSession() {
-        // Save to UserDefaults
-        UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
-        
-        // Create new session with updated prompt
-        session = LanguageModelSession(instructions: systemPrompt)
-    }
-    
-    // Bindings for external access
-    var systemPromptBinding: Binding<String> {
-        Binding(
-            get: { systemPrompt },
-            set: { newValue in
-                systemPrompt = newValue
-                updateSession()
-            }
-        )
-    }
+
 } 

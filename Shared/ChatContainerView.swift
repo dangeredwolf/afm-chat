@@ -8,27 +8,27 @@
 import SwiftUI
 
 struct ChatContainerView: View {
+    @StateObject private var chatManager = ChatManager()
     @State private var showingSettings: Bool = false
-    @State private var chatView = ChatView()
     
     var body: some View {
         NavigationView {
-            chatView
+            ChatView(chatManager: chatManager)
                 .toolbar {
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
                         Button(action: { showingSettings = true }) {
                             Image(systemName: "gear")
                         }
                     
-                        Button(action: chatView.clearChat) {
+                        Button(action: chatManager.clearChat) {
                             Image(systemName: "trash")
                         }
                     }
                 }
                 .sheet(isPresented: $showingSettings) {
                     SettingsView(
-                        systemPrompt: chatView.systemPromptBinding,
-                        onSave: chatView.updateSession
+                        systemPrompt: $chatManager.systemPrompt,
+                        onSave: { }
                     )
                 }
         }
