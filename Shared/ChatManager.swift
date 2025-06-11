@@ -46,27 +46,38 @@ class ChatManager: ObservableObject {
         let userChatMessage = ChatMessage(content: userMessage, isUser: true)
         messages.append(userChatMessage)
         
+        // Create placeholder AI message for streaming
+        let aiMessage = ChatMessage(content: "", isUser: false)
+        messages.append(aiMessage)
+        
         // Clear input and set loading state
         inputText = ""
         isLoading = true
         
-        // Send to LLM
+        // Send to LLM with streaming
         Task {
             do {
                 let generationOptions = GenerationOptions(temperature: temperature)
-                let response = try await session.respond(to: userMessage, options: generationOptions)
+                let responseStream = session.streamResponse(to: userMessage, options: generationOptions)
+                
+                for try await response in responseStream {
+                    await MainActor.run {
+                        // Update the last message (AI response) with streaming content
+                        if let lastIndex = self.messages.lastIndex(where: { !$0.isUser }) {
+                            self.messages[lastIndex] = ChatMessage(content: response, isUser: false)
+                        }
+                    }
+                }
                 
                 await MainActor.run {
-                    // Add AI response
-                    let aiMessage = ChatMessage(content: response.content, isUser: false)
-                    self.messages.append(aiMessage)
                     self.isLoading = false
                 }
             } catch {
                 await MainActor.run {
-                    // Add error message
-                    let errorMessage = ChatMessage(content: "Error calling FoundationModel: \(error.localizedDescription)", isUser: false)
-                    self.messages.append(errorMessage)
+                    // Replace the placeholder with error message
+                    if let lastIndex = self.messages.lastIndex(where: { !$0.isUser }) {
+                        self.messages[lastIndex] = ChatMessage(content: "Error calling FoundationModel: \(error.localizedDescription)", isUser: false)
+                    }
                     self.isLoading = false
                 }
             }
