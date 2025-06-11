@@ -58,6 +58,8 @@ struct ContentView: View {
                         .lineLimit(1...4)
                         .disabled(isLoading)
                         .focused($isInputFocused)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
                         .onSubmit {
                             sendMessage()
                         }
