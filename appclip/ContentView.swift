@@ -9,13 +9,13 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        NavigationView {
+            ChatView(
+                showSettings: true,
+                showClearButton: true,
+                navigationTitle: "Chat"
+            )
         }
-        .padding()
     }
 }
 
