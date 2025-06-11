@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import MarkdownUI
 
 struct ChatBubble: View {
     let message: ChatMessage
@@ -17,12 +18,30 @@ struct ChatBubble: View {
             }
             
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
-                    .padding(12)
-                    .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
-                    .foregroundColor(message.isUser ? .white : .primary)
-                    .cornerRadius(16)
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
+                Group {
+                    if message.isUser {
+                        // User messages: plain text
+                        Text(message.content)
+                    } else {
+                        // AI messages: rendered markdown
+                        Markdown(message.content)
+                            .markdownTheme(.gitHub)
+                            .markdownTextStyle(\.text) {
+                                ForegroundColor(.primary)
+                            }
+                            .markdownTextStyle(\.code) {
+                                FontFamilyVariant(.monospaced)
+                                FontSize(.em(0.85))
+                                ForegroundColor(.primary)
+                                BackgroundColor(.primary.opacity(0.1))
+                            }
+                    }
+                }
+                .padding(12)
+                .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
+                .foregroundColor(message.isUser ? .white : .primary)
+                .cornerRadius(16)
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
                 
                 Text(message.timestamp, style: .time)
                     .font(.caption2)
