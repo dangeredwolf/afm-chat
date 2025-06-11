@@ -35,7 +35,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		36A7A3FC2DF923BC00B52461 /* afm-chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = afm-chat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		36A7A3FC2DF923BC00B52461 /* afm-chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "afm-chat.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		36D70A042DF9482B006889A7 /* appclip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = appclip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -52,7 +52,7 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		36A7A3FE2DF923BC00B52461 /* afm-chat */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = afm-chat;
+			path = "afm-chat";
 			sourceTree = "<group>";
 		};
 		36D70A052DF9482B006889A7 /* appclip */ = {
@@ -121,10 +121,10 @@
 			fileSystemSynchronizedGroups = (
 				36A7A3FE2DF923BC00B52461 /* afm-chat */,
 			);
-			name = afm-chat;
+			name = "afm-chat";
 			packageProductDependencies = (
 			);
-			productName = afm-chat;
+			productName = "afm-chat";
 			productReference = 36A7A3FC2DF923BC00B52461 /* afm-chat.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -362,6 +362,7 @@
 				DEVELOPMENT_TEAM = V4MZKCA3P6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -393,6 +394,7 @@
 				DEVELOPMENT_TEAM = V4MZKCA3P6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -426,7 +428,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = appclip/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
+				INFOPLIST_KEY_CFBundleDisplayName = "afm-chat";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -460,7 +462,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = appclip/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
+				INFOPLIST_KEY_CFBundleDisplayName = "afm-chat";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
