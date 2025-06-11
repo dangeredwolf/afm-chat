@@ -25,7 +25,7 @@ struct ChatBubble: View {
                     } else {
                         // AI messages: rendered markdown
                         Markdown(message.content)
-                            .markdownTheme(.gitHub)
+//                            .markdownTheme(.gitHub)
                             .markdownTextStyle(\.text) {
                                 ForegroundColor(.primary)
                             }
@@ -38,7 +38,7 @@ struct ChatBubble: View {
                     }
                 }
                 .padding(12)
-                .background(message.isUser ? Color.blue : Color.gray.opacity(0.2))
+                .background(message.isUser ? Color.indigo : Color.gray.opacity(0.2))
                 .foregroundColor(message.isUser ? .white : .primary)
                 .cornerRadius(16)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
