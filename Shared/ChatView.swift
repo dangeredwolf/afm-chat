@@ -25,20 +25,14 @@ struct ChatView: View {
                         if chatManager.currentMessages.isEmpty {
                             // Welcome message for new chats
                             VStack(spacing: 16) {
-                                Image(systemName: "message.circle")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.secondary.opacity(0.6))
+                                // Image(systemName: "message.circle")
+                                //     .font(.system(size: 60))
+                                //     .foregroundColor(.secondary.opacity(0.6))
                                 
                                 Text("Start a New Conversation")
                                     .font(.title2)
                                     .fontWeight(.medium)
                                     .foregroundColor(.primary)
-                                
-                                Text("Ask me anything! Type your message below to begin.")
-                                    .font(.body)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
                                 
                                 // Show current chat settings
                                 VStack(spacing: 8) {
