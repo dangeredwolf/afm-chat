@@ -22,16 +22,62 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(chatManager.messages) { message in
-                            ChatBubble(message: message)
+                        if chatManager.currentMessages.isEmpty {
+                            // Welcome message for new chats
+                            VStack(spacing: 16) {
+                                Image(systemName: "message.circle")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.secondary.opacity(0.6))
+                                
+                                Text("Start a New Conversation")
+                                    .font(.title2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                                
+                                Text("Ask me anything! Type your message below to begin.")
+                                    .font(.body)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                                
+                                // Show current chat settings
+                                VStack(spacing: 8) {
+                                    Text("Chat Settings")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text("Temperature: \(chatManager.currentTemperature, specifier: "%.1f")")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding()
+                                .background(Color.secondary.opacity(0.1))
+                                .cornerRadius(12)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding()
+                        } else {
+                            ForEach(chatManager.currentMessages) { message in
+                                ChatBubble(
+                                    message: message,
+                                    onEdit: { messageId in
+                                        chatManager.editMessage(messageId)
+                                        isInputFocused = true
+                                    },
+                                    onCopy: { messageId in
+                                        chatManager.copyMessage(messageId)
+                                    }
+                                )
                                 .id(message.id)
+                            }
                         }
                     }
                     .padding()
                 }
-                .onChange(of: chatManager.messages.count) { _ in
+                .onChange(of: chatManager.currentMessages.count) { _ in
                     // Auto-scroll to bottom when new messages are added
-                    if let lastMessage = chatManager.messages.last {
+                    if let lastMessage = chatManager.currentMessages.last {
                         withAnimation(.easeOut(duration: 0.3)) {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
                         }
@@ -43,9 +89,38 @@ struct ChatView: View {
                 }
             }
             
+            // Editing indicator
+            if chatManager.editingMessageId != nil {
+                HStack {
+                    Image(systemName: "pencil.circle.fill")
+                        .foregroundColor(.orange)
+                    Text("Editing message...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button("Cancel") {
+                        chatManager.cancelEditing()
+                        isInputFocused = false
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .background(Color.orange.opacity(0.05))
+            }
+            
             // Input area
             HStack {
-                TextField("Type your message...", text: $chatManager.inputText, axis: .vertical)
+                TextField(
+                    chatManager.editingMessageId != nil ? "Edit your message..." : "Type your message...",
+                    text: $chatManager.inputText,
+                    axis: .vertical
+                )
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .lineLimit(1...4)
                     .disabled(chatManager.isLoading)
@@ -65,15 +140,13 @@ struct ChatView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
-                        Image(systemName: "paperplane.fill")
+                        Image(systemName: chatManager.editingMessageId != nil ? "checkmark" : "paperplane.fill")
                     }
                 }
                 .disabled(chatManager.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || chatManager.isLoading)
             }
             .padding()
         }
-        .navigationTitle("AFM Chat")
+        .navigationTitle(chatManager.currentChat?.title ?? "AFM Chat")
     }
-    
-
 } 

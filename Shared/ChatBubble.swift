@@ -10,6 +10,14 @@ import MarkdownUI
 
 struct ChatBubble: View {
     let message: ChatMessage
+    let onEdit: ((UUID) -> Void)?
+    let onCopy: ((UUID) -> Void)?
+    
+    init(message: ChatMessage, onEdit: ((UUID) -> Void)? = nil, onCopy: ((UUID) -> Void)? = nil) {
+        self.message = message
+        self.onEdit = onEdit
+        self.onCopy = onCopy
+    }
     
     var body: some View {
         HStack {
@@ -42,6 +50,21 @@ struct ChatBubble: View {
                 .foregroundColor(message.isUser ? .white : .primary)
                 .cornerRadius(16)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
+                .contextMenu {
+                    if message.isUser {
+                        Button(action: {
+                            onEdit?(message.id)
+                        }) {
+                            Label("Edit Message", systemImage: "pencil")
+                        }
+                    } else {
+                        Button(action: {
+                            onCopy?(message.id)
+                        }) {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                    }
+                }
                 
                 Text(message.timestamp, style: .time)
                     .font(.caption2)
