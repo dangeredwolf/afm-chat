@@ -234,13 +234,6 @@ struct ChatRowView: View {
                     .italic()
             }
             
-            // Show chat settings preview
-            HStack {
-                Text("Temperature: \(chat.temperature, specifier: "%.1f")")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                Spacer()
-            }
         }
         .padding(.vertical, 4)
     }

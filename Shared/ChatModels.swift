@@ -28,8 +28,8 @@ struct Chat: Identifiable, Codable {
         self.temperature = temperature
     }
     
-    // Generate a smart title based on the first user message
-    mutating func generateTitle() {
+    // Generate a fallback title based on the first user message (used if AI generation fails)
+    mutating func generateFallbackTitle() {
         if let firstUserMessage = messages.first(where: { $0.isUser })?.content.trimmingCharacters(in: .whitespacesAndNewlines) {
             let words = firstUserMessage.components(separatedBy: .whitespacesAndNewlines)
             if words.count > 4 {

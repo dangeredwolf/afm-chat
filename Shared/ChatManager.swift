@@ -29,7 +29,53 @@ class ChatManager: ObservableObject {
     // Temporary chat that hasn't been saved yet
     @Published var temporaryChat: Chat? = nil
     
-    private var session: LanguageModelSession
+    // Store sessions per chat to maintain context
+    private var sessions: [UUID: LanguageModelSession] = [:]
+    
+    // Separate session for generating titles (not tied to any specific chat)
+    private lazy var titleGenerationSession: LanguageModelSession = {
+        return LanguageModelSession(instructions: """
+            You are a helpful assistant that creates concise, descriptive titles for conversations.
+            
+            Your task is to generate a short, clear title (3-6 words) that captures the main topic or intent of the user's message.
+            
+            Guidelines:
+            - Keep titles under 50 characters
+            - Use title case (capitalize important words)
+            - Use the same language as the original message (not always English)
+            - Be specific and descriptive
+            - Avoid generic phrases like "User Question" or "Help Request"
+            - Focus on the main topic, action, or subject matter
+            - Avoid quoting the text verbatim where possible
+            
+            Examples:
+            - "How to bake chocolate cookies" → "Chocolate Cookie Recipe"
+            - "What's the weather like today?" → "Today's Weather Forecast"
+            - "Help me write a resume" → "Resume Writing Help"
+            - "Explicar la física cuántica" → "Explicación de la Física Cuántica"
+            - "Plan a trip to Japan" → "Japan Travel Planning"
+            - "Hola" - "Saludo de Usuario"
+            
+            Respond with only the title in the same language as the original message, no additional text or punctuation.
+            """)
+    }()
+    
+    // Current session for the active chat
+    private var currentSession: LanguageModelSession {
+        guard let chatId = currentChatId else {
+            // Fallback session if no chat is selected
+            return LanguageModelSession(instructions: "You are a helpful assistant.")
+        }
+        
+        // Get or create session for this chat
+        if let existingSession = sessions[chatId] {
+            return existingSession
+        } else {
+            let newSession = LanguageModelSession(instructions: currentSystemPrompt)
+            sessions[chatId] = newSession
+            return newSession
+        }
+    }
     
     // Computed property for current chat
     var currentChat: Chat? {
@@ -79,13 +125,11 @@ class ChatManager: ObservableObject {
     }
     
     init() {
-        // Initialize with default session
-        self.session = LanguageModelSession(instructions: "You are a helpful assistant.")
-        
         loadChats()
         
         // Don't automatically create a chat - let the navigation handle it
         // Users will explicitly navigate to create new chats or select existing ones
+        // Sessions will be created per-chat as needed
     }
     
     func createNewChat() -> UUID {
@@ -113,6 +157,8 @@ class ChatManager: ObservableObject {
         if let tempChat = temporaryChat, tempChat.id == chatId {
             temporaryChat = nil
             currentChatId = nil
+            // Clean up session
+            sessions.removeValue(forKey: chatId)
             return
         }
         
@@ -120,6 +166,9 @@ class ChatManager: ObservableObject {
         guard chats.count > 1 else { return } // Always keep at least one chat
         
         chats.removeAll { $0.id == chatId }
+        
+        // Clean up session for deleted chat
+        sessions.removeValue(forKey: chatId)
         
         // If we deleted the current chat, switch to another one
         if currentChatId == chatId {
@@ -154,9 +203,13 @@ class ChatManager: ObservableObject {
         let userChatMessage = ChatMessage(content: userMessage, isUser: true)
         chat.messages.append(userChatMessage)
         
-        // Generate title from first message if needed
+        // Generate AI title from first message if needed
         if chat.messages.filter({ $0.isUser }).count == 1 {
-            chat.generateTitle()
+            // Generate fallback title immediately
+            chat.generateFallbackTitle()
+            
+            // Generate AI title in the background
+            generateAITitle(for: chat.id, userMessage: userMessage)
         }
         
         // If this is a temporary chat with its first message, save it permanently
@@ -181,7 +234,7 @@ class ChatManager: ObservableObject {
         Task {
             do {
                 let generationOptions = GenerationOptions(temperature: chat.temperature)
-                let responseStream = session.streamResponse(to: userMessage, options: generationOptions)
+                let responseStream = currentSession.streamResponse(to: userMessage, options: generationOptions)
                 
                 for try await response in responseStream {
                     await MainActor.run {
@@ -264,7 +317,19 @@ class ChatManager: ObservableObject {
     }
     
     private func updateSession() {
-        session = LanguageModelSession(instructions: currentSystemPrompt)
+        // Update or create session for current chat
+        // Each chat maintains its own session to preserve conversation context
+        guard let chatId = currentChatId else { return }
+        
+        // If session doesn't exist for this chat, it will be created by currentSession computed property
+        // If session exists but system prompt changed, create a new session
+        if let existingSession = sessions[chatId] {
+            // Check if we need to update the session due to system prompt change
+            // For now, we'll keep the existing session to maintain context
+            // In a future enhancement, we could detect system prompt changes and handle them
+        }
+        
+        // The currentSession computed property will handle getting/creating the session
     }
     
     private func saveChats() {
@@ -285,6 +350,43 @@ class ChatManager: ObservableObject {
         if let savedChat = chats.first(where: { $0.id == chatId }) {
             temporaryChat = nil
             currentChatId = chatId
+        }
+    }
+    
+    private func generateAITitle(for chatId: UUID, userMessage: String) {
+        // Generate AI title in the background
+        Task {
+            do {
+                let prompt = "Generate a title for a conversation whose first message is: \"\(userMessage)\""
+                let response = try await titleGenerationSession.respond(to: prompt)
+                
+                await MainActor.run {
+                    // Find and update the chat with the AI-generated title
+                    let aiTitle = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    
+                    // Validate the AI title (ensure it's not too long and not empty)
+                    if !aiTitle.isEmpty && aiTitle.count <= 50 {
+                        // Update the chat in the appropriate location (temporary or saved)
+                        if let tempChat = self.temporaryChat, tempChat.id == chatId {
+                            var updatedTempChat = tempChat
+                            updatedTempChat.title = aiTitle
+                            self.temporaryChat = updatedTempChat
+                        } else if let chatIndex = self.chats.firstIndex(where: { $0.id == chatId }) {
+                            self.chats[chatIndex].title = aiTitle
+                            self.saveChats()
+                        }
+                        
+                        // Force UI update
+                        self.objectWillChange.send()
+                    } else {
+                        // Keep the fallback title if AI title is invalid
+                        print("AI title invalid or too long: \(aiTitle)")
+                    }
+                }
+            } catch {
+                print("Failed to generate AI title: \(error)")
+                // Fallback title is already set, so we don't need to do anything
+            }
         }
     }
 } 
