@@ -147,6 +147,5 @@ struct ChatView: View {
             }
             .padding()
         }
-        .navigationTitle(chatManager.currentChat?.title ?? "AFM Chat")
     }
 } 

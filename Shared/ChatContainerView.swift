@@ -42,7 +42,7 @@ struct ChatListView: View {
             if !chatManager.chats.isEmpty {
                 Section(header: Text("Recent Chats")) {
                     ForEach(chatManager.chats) { chat in
-                        NavigationLink(destination: ChatDetailView(chatManager: chatManager, chatId: chat.id)) {
+                        NavigationLink(destination: ChatDetailView(chatManager: chatManager, chatId: chat.id, initialTitle: chat.title)) {
                             ChatRowView(
                                 chat: chat,
                                 isSelected: chat.id == chatManager.currentChatId,
@@ -79,11 +79,21 @@ struct ChatDetailView: View {
     @ObservedObject var chatManager: ChatManager
     let chatId: UUID?
     @State private var showingSettings: Bool = false
+    @State private var chatTitle: String
     @Environment(\.dismiss) private var dismiss
+    let initialTitle: String
+    
+    init(chatManager: ChatManager, chatId: UUID?, initialTitle: String = "New Chat") {
+        self.chatManager = chatManager
+        self.chatId = chatId
+        self.initialTitle = initialTitle
+        self._chatTitle = State(initialValue: initialTitle)
+    }
     
     var body: some View {
         ChatView(chatManager: chatManager)
             .navigationBarBackButtonHidden(false)
+            .navigationTitle(chatTitle)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button(action: { showingSettings = true }) {
@@ -126,6 +136,12 @@ struct ChatDetailView: View {
                     // Create new chat if chatId is nil
                     let newChatId = chatManager.createNewChat()
                     chatManager.currentChatId = newChatId
+                }
+            }
+            .onChange(of: chatManager.currentChat?.title) { newTitle in
+                // Update title when chat title changes (e.g., after first message)
+                if let newTitle = newTitle {
+                    chatTitle = newTitle
                 }
             }
     }
