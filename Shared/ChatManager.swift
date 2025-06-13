@@ -64,14 +64,21 @@ class ChatManager: ObservableObject {
     private var currentSession: LanguageModelSession {
         guard let chatId = currentChatId else {
             // Fallback session if no chat is selected
-            return LanguageModelSession(instructions: "You are a helpful assistant.")
+            return LanguageModelSession(
+                 instructions: "You are a helpful assistant."
+            )
         }
         
         // Get or create session for this chat
         if let existingSession = sessions[chatId] {
             return existingSession
         } else {
-            let newSession = LanguageModelSession(instructions: currentSystemPrompt)
+            let newSession = LanguageModelSession(
+                tools: [
+                    WeatherTool()
+                ],
+                instructions: currentSystemPrompt
+            )
             sessions[chatId] = newSession
             return newSession
         }

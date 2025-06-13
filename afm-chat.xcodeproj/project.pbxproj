@@ -21,6 +21,8 @@
 		3658A65E2DF9EE1A00254350 /* ChatManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3658A65D2DF9EE1A00254350 /* ChatManager.swift */; };
 		3658A65F2DF9EE1A00254350 /* ChatManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3658A65D2DF9EE1A00254350 /* ChatManager.swift */; };
 		3658A6612DF9F04E00254350 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3658A6602DF9F04E00254350 /* MarkdownUI */; };
+		3658A6962DFBA8A500254350 /* Weather.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3658A6942DFBA8A500254350 /* Weather.swift */; };
+		3658A6972DFBA8A500254350 /* Weather.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3658A6942DFBA8A500254350 /* Weather.swift */; };
 		36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = 36D70A042DF9482B006889A7 /* appclip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -55,6 +57,7 @@
 		3658A6202DF9E89C00254350 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		3658A6212DF9E89C00254350 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		3658A65D2DF9EE1A00254350 /* ChatManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatManager.swift; sourceTree = "<group>"; };
+		3658A6942DFBA8A500254350 /* Weather.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Weather.swift; sourceTree = "<group>"; };
 		36A7A3FC2DF923BC00B52461 /* afm-chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "afm-chat.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		36D70A042DF9482B006889A7 /* appclip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = appclip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -110,12 +113,21 @@
 			children = (
 				3658A61D2DF9E89C00254350 /* ChatBubble.swift */,
 				3658A61E2DF9E89C00254350 /* ChatContainerView.swift */,
+				3658A6952DFBA8A500254350 /* Tools */,
 				3658A65D2DF9EE1A00254350 /* ChatManager.swift */,
 				3658A61F2DF9E89C00254350 /* ChatModels.swift */,
 				3658A6202DF9E89C00254350 /* ChatView.swift */,
 				3658A6212DF9E89C00254350 /* SettingsView.swift */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		3658A6952DFBA8A500254350 /* Tools */ = {
+			isa = PBXGroup;
+			children = (
+				3658A6942DFBA8A500254350 /* Weather.swift */,
+			);
+			path = Tools;
 			sourceTree = "<group>";
 		};
 		36A7A3F32DF923BC00B52461 = {
@@ -254,6 +266,7 @@
 				3658A6232DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				3658A6242DF9E89C00254350 /* ChatModels.swift in Sources */,
 				3658A6252DF9E89C00254350 /* ChatBubble.swift in Sources */,
+				3658A6962DFBA8A500254350 /* Weather.swift in Sources */,
 				3658A6262DF9E89C00254350 /* SettingsView.swift in Sources */,
 				3658A6272DF9E89C00254350 /* ChatView.swift in Sources */,
 				3658A65E2DF9EE1A00254350 /* ChatManager.swift in Sources */,
@@ -267,6 +280,7 @@
 				3658A6282DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				3658A6292DF9E89C00254350 /* ChatModels.swift in Sources */,
 				3658A62A2DF9E89C00254350 /* ChatBubble.swift in Sources */,
+				3658A6972DFBA8A500254350 /* Weather.swift in Sources */,
 				3658A62B2DF9E89C00254350 /* SettingsView.swift in Sources */,
 				3658A62C2DF9E89C00254350 /* ChatView.swift in Sources */,
 				3658A65F2DF9EE1A00254350 /* ChatManager.swift in Sources */,
