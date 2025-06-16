@@ -74,9 +74,9 @@ class ChatManager: ObservableObject {
             return existingSession
         } else {
             let newSession = LanguageModelSession(
-                tools: [
-                    WeatherTool()
-                ],
+                // tools: [
+                //     WeatherTool()
+                // ],
                 instructions: currentSystemPrompt
             )
             sessions[chatId] = newSession
