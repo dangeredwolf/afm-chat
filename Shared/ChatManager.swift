@@ -107,7 +107,8 @@ class ChatManager: ObservableObject {
         // Note: When using transcript, instructions should be included in the transcript itself
         return LanguageModelSession(
             tools: [
-                WeatherTool()
+//                SafeWeatherTool(),
+                SafeJavaScriptTool()
             ],
             // transcript: transcript,
             instructions: systemPrompt
@@ -314,42 +315,9 @@ class ChatManager: ObservableObject {
             sessions[chatId] = newSession
         }
         
-        // Send to LLM with streaming
+        // Send to LLM with streaming and tool call tracking
         Task {
-            do {
-                let generationOptions = GenerationOptions(temperature: chat.temperature)
-                let responseStream = currentSession.streamResponse(to: userMessage, options: generationOptions)
-                
-                for try await response in responseStream {
-                    await MainActor.run {
-                        // Update the current chat's last message
-                        if var currentChat = self.currentChat {
-                            if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                                currentChat.messages[lastIndex] = ChatMessage(content: response, isUser: false)
-                                self.currentChat = currentChat
-                            }
-                        }
-                    }
-                }
-                
-                await MainActor.run {
-                    self.isLoading = false
-                    self.saveChats()
-                }
-            } catch {
-                await MainActor.run {
-                    // Replace the placeholder with proper error handling
-                    if var currentChat = self.currentChat {
-                        if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                            let chatError = ChatError.fromFoundationModelsError(error)
-                            currentChat.messages[lastIndex] = ChatMessage(content: chatError.description, isUser: false, error: chatError)
-                            self.currentChat = currentChat
-                        }
-                    }
-                    self.isLoading = false
-                    self.saveChats()
-                }
-            }
+            await self.processLLMResponse(userMessage: userMessage, chat: chat)
         }
     }
     
@@ -416,42 +384,9 @@ class ChatManager: ObservableObject {
         currentChat = chat
         isLoading = true
         
-        // Retry the request
+        // Retry the request with tool call tracking
         Task {
-            do {
-                let generationOptions = GenerationOptions(temperature: chat.temperature)
-                let responseStream = currentSession.streamResponse(to: userMessage, options: generationOptions)
-                
-                for try await response in responseStream {
-                    await MainActor.run {
-                        // Update the current chat's last message
-                        if var currentChat = self.currentChat {
-                            if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                                currentChat.messages[lastIndex] = ChatMessage(content: response, isUser: false)
-                                self.currentChat = currentChat
-                            }
-                        }
-                    }
-                }
-                
-                await MainActor.run {
-                    self.isLoading = false
-                    self.saveChats()
-                }
-            } catch {
-                await MainActor.run {
-                    // Replace the placeholder with proper error handling
-                    if var currentChat = self.currentChat {
-                        if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                            let chatError = ChatError.fromFoundationModelsError(error)
-                            currentChat.messages[lastIndex] = ChatMessage(content: chatError.description, isUser: false, error: chatError)
-                            self.currentChat = currentChat
-                        }
-                    }
-                    self.isLoading = false
-                    self.saveChats()
-                }
-            }
+            await self.processLLMResponse(userMessage: userMessage, chat: chat)
         }
     }
     
@@ -501,9 +436,26 @@ class ChatManager: ObservableObject {
     }
     
     private func loadChats() {
-        if let data = UserDefaults.standard.data(forKey: "savedChats"),
-           let decoded = try? JSONDecoder().decode([Chat].self, from: data) {
-            self.chats = decoded
+        if let data = UserDefaults.standard.data(forKey: "savedChats") {
+            do {
+                let decoded = try JSONDecoder().decode([Chat].self, from: data)
+                self.chats = decoded
+                print("Successfully loaded \(decoded.count) chats")
+            } catch {
+                print("Failed to decode saved chats: \(error)")
+                print("This might be due to model changes. Attempting to recover...")
+                
+                // Try to recover by clearing the corrupted data
+                // Note: This will lose the old chats, but prevents app crashes
+                UserDefaults.standard.removeObject(forKey: "savedChats")
+                self.chats = []
+                
+                // Optionally, we could try to backup the corrupted data
+                let backupKey = "savedChats_backup_\(Date().timeIntervalSince1970)"
+                UserDefaults.standard.set(data, forKey: backupKey)
+                print("Corrupted data backed up to key: \(backupKey)")
+                print("Your previous chats were backed up but couldn't be loaded due to model changes.")
+            }
         }
     }
     
@@ -512,6 +464,52 @@ class ChatManager: ObservableObject {
         if let savedChat = chats.first(where: { $0.id == chatId }) {
             temporaryChat = nil
             currentChatId = chatId
+        }
+    }
+    
+    // Try to recover chats from backup (called manually if needed)
+    func tryRecoverChats() {
+        let userDefaults = UserDefaults.standard
+        let allKeys = userDefaults.dictionaryRepresentation().keys
+        
+        // Find backup keys
+        let backupKeys = allKeys.filter { $0.hasPrefix("savedChats_backup_") }
+        
+        if !backupKeys.isEmpty {
+            print("Found \(backupKeys.count) backup(s). Attempting to recover the most recent one...")
+            
+            if let mostRecentBackup = backupKeys.sorted().last,
+               let backupData = userDefaults.data(forKey: mostRecentBackup) {
+                
+                print("Attempting to recover from: \(mostRecentBackup)")
+                
+                // Try to decode the backup data with a more flexible approach
+                if let recoveredChats = tryDecodeBackupData(backupData) {
+                    self.chats = recoveredChats
+                    saveChats() // Save the recovered chats in the new format
+                    print("Successfully recovered \(recoveredChats.count) chats!")
+                    
+                    // Clean up the backup
+                    userDefaults.removeObject(forKey: mostRecentBackup)
+                } else {
+                    print("Failed to recover from backup")
+                }
+            }
+        } else {
+            print("No backup data found")
+        }
+    }
+    
+    private func tryDecodeBackupData(_ data: Data) -> [Chat]? {
+        // This is a simplified recovery attempt
+        // In a real implementation, you might want to try different decoding strategies
+        do {
+            let decoder = JSONDecoder()
+            let chats = try decoder.decode([Chat].self, from: data)
+            return chats
+        } catch {
+            print("Failed to decode backup data: \(error)")
+            return nil
         }
     }
     
@@ -553,4 +551,138 @@ class ChatManager: ObservableObject {
             }
         }
     }
+    
+    // Process LLM response with real tool call information from transcript
+    private func processLLMResponse(userMessage: String, chat: Chat) async {
+        var lastToolCalls: [ToolCallInfo] = []
+        
+        do {
+            let generationOptions = GenerationOptions(temperature: chat.temperature)
+            let responseStream = currentSession.streamResponse(to: userMessage, options: generationOptions)
+            
+            var currentResponse = ""
+            
+            for try await response in responseStream {
+                await MainActor.run {
+                    currentResponse = response
+                    
+                    // Extract tool call information from the session's transcript
+                    let extractedToolCalls = self.extractToolCallsFromTranscript()
+                    
+                    // Update the current chat's last message
+                    if var currentChat = self.currentChat {
+                        if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
+                            currentChat.messages[lastIndex] = ChatMessage(
+                                content: currentResponse,
+                                isUser: false,
+                                toolCalls: extractedToolCalls
+                            )
+                            self.currentChat = currentChat
+                        }
+                    }
+                    
+                    lastToolCalls = extractedToolCalls
+                }
+            }
+            
+            await MainActor.run {
+                self.isLoading = false
+                self.saveChats()
+            }
+        } catch {
+            await MainActor.run {
+                let chatError = ChatError.fromFoundationModelsError(error)
+                
+                if var currentChat = self.currentChat {
+                    if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
+                        // Mark any existing tool calls as failed
+                        var failedToolCalls = lastToolCalls
+                        for i in failedToolCalls.indices {
+                            failedToolCalls[i].status = .failed
+                            failedToolCalls[i].error = error.localizedDescription
+                        }
+                        
+                        currentChat.messages[lastIndex] = ChatMessage(
+                            content: chatError.description,
+                            isUser: false,
+                            error: chatError,
+                            toolCalls: failedToolCalls
+                        )
+                        self.currentChat = currentChat
+                    }
+                }
+                self.isLoading = false
+                self.saveChats()
+            }
+        }
+    }
+    
+    // Extract tool call information from the session's transcript
+    private func extractToolCallsFromTranscript() -> [ToolCallInfo] {
+        var toolCalls: [ToolCallInfo] = []
+        
+        // Access the transcript from the current session
+        let transcript = currentSession.transcript
+        
+        // Look for tool calls and tool outputs in the transcript entries
+        for entry in transcript {
+            switch entry {
+            case .toolCalls(let calls):
+                // Convert FoundationModels tool calls to our ToolCallInfo format
+                for call in calls {
+                    let toolCall = ToolCallInfo(
+                        toolName: call.toolName,
+                        toolDescription: getToolDescription(for: call.toolName),
+                        arguments: String(describing: call.arguments),
+                        status: .executing // Initially executing
+                    )
+                    toolCalls.append(toolCall)
+                }
+                
+            case .toolOutput(let output):
+                // Find the corresponding tool call and mark it as completed
+                if let index = toolCalls.firstIndex(where: { $0.toolName == output.toolName }) {
+                    toolCalls[index].status = .completed
+                    toolCalls[index].result = extractToolOutputContent(from: output)
+                }
+                
+            default:
+                break
+            }
+        }
+        
+        return toolCalls
+    }
+    
+    // Get tool description for a given tool name
+    private func getToolDescription(for toolName: String) -> String {
+        switch toolName {
+        case "getWeather":
+            return "Retrieve the latest weather information for a city"
+        case "Code Interpreter":
+            return "Execute JavaScript code and returns the result"
+        default:
+            return "Execute tool: \(toolName)"
+        }
+    }
+    
+    // Extract content from tool output
+    private func extractToolOutputContent(from output: Transcript.ToolOutput) -> String {
+        // Convert segments to readable text
+        let content = output.segments.compactMap { segment in
+            switch segment {
+            case .text(let textSegment):
+                return textSegment.content
+            case .structure(let structuredSegment):
+                return String(describing: structuredSegment.content)
+            @unknown default:
+                return nil
+            }
+        }.joined(separator: "\n")
+        
+        return content.isEmpty ? "Tool executed successfully" : content
+    }
+
+    
+
 } 

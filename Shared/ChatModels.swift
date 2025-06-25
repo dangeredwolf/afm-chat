@@ -94,27 +94,124 @@ enum ChatError: Identifiable, Codable {
                 return .unknownError(error.localizedDescription)
             }
         } else {
+            // Check for tool-related errors
+            let errorDescription = error.localizedDescription
+            if errorDescription.contains("tool:") || errorDescription.contains("WeatherTool") {
+                return .unknownError("Tool execution failed: \(errorDescription)")
+            }
             // Default to unknown error
             return .unknownError(error.localizedDescription)
         }
     }
 }
 
-struct ChatMessage: Identifiable {
+// Tool call tracking
+struct ToolCallInfo: Identifiable, Codable {
     let id = UUID()
+    let toolName: String
+    let toolDescription: String
+    let arguments: String
+    var status: ToolCallStatus = .pending
+    var result: String?
+    var error: String?
+    let timestamp = Date()
+}
+
+enum ToolCallStatus: String, Codable, CaseIterable {
+    case pending = "pending"
+    case executing = "executing"
+    case completed = "completed"
+    case failed = "failed"
+    
+    var displayName: String {
+        switch self {
+        case .pending: return "Queued"
+        case .executing: return "Running"
+        case .completed: return "Completed"
+        case .failed: return "Failed"
+        }
+    }
+    
+    var systemIcon: String {
+        switch self {
+        case .pending: return "clock"
+        case .executing: return "gear"
+        case .completed: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.circle.fill"
+        }
+    }
+}
+
+struct ChatMessage: Identifiable {
+    let id: UUID
     let content: String
     let isUser: Bool
-    let timestamp = Date()
+    let timestamp: Date
     let error: ChatError?
+    var toolCalls: [ToolCallInfo]
     
-    init(content: String, isUser: Bool, error: ChatError? = nil) {
+    init(content: String, isUser: Bool, error: ChatError? = nil, toolCalls: [ToolCallInfo] = []) {
+        self.id = UUID()
         self.content = content
         self.isUser = isUser
+        self.timestamp = Date()
         self.error = error
+        self.toolCalls = toolCalls
+    }
+    
+    // Private initializer for decoding
+    private init(id: UUID, content: String, isUser: Bool, timestamp: Date, error: ChatError?, toolCalls: [ToolCallInfo]) {
+        self.id = id
+        self.content = content
+        self.isUser = isUser
+        self.timestamp = timestamp
+        self.error = error
+        self.toolCalls = toolCalls
     }
     
     var isError: Bool {
         return error != nil
+    }
+    
+    var hasToolCalls: Bool {
+        return !toolCalls.isEmpty
+    }
+    
+    var hasActiveToolCalls: Bool {
+        return toolCalls.contains { $0.status == .pending || $0.status == .executing }
+    }
+}
+
+// When adding tool calls, etc it broke loading old chats, so this lets us carefully load properties to make everything work
+extension ChatMessage: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id, content, isUser, timestamp, error, toolCalls
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try to decode all properties, providing defaults for new ones
+        let id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        let content = try container.decode(String.self, forKey: .content)
+        let isUser = try container.decode(Bool.self, forKey: .isUser)
+        let timestamp = try container.decodeIfPresent(Date.self, forKey: .timestamp) ?? Date()
+        
+        // Optional properties (new additions that might not exist in old data)
+        let error = try container.decodeIfPresent(ChatError.self, forKey: .error)
+        let toolCalls = try container.decodeIfPresent([ToolCallInfo].self, forKey: .toolCalls) ?? []
+        
+        self.init(id: id, content: content, isUser: isUser, timestamp: timestamp, error: error, toolCalls: toolCalls)
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(content, forKey: .content)
+        try container.encode(isUser, forKey: .isUser)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encodeIfPresent(error, forKey: .error)
+        try container.encode(toolCalls, forKey: .toolCalls)
     }
 }
 
@@ -145,4 +242,4 @@ struct Chat: Identifiable, Codable {
     }
 }
 
-extension ChatMessage: Codable {} 
+ 
