@@ -73,15 +73,76 @@ class ChatManager: ObservableObject {
         if let existingSession = sessions[chatId] {
             return existingSession
         } else {
-            let newSession = LanguageModelSession(
-                // tools: [
-                //     WeatherTool()
-                // ],
-                instructions: currentSystemPrompt
-            )
+            let newSession = createSessionForChat(chatId: chatId)
             sessions[chatId] = newSession
             return newSession
         }
+    }
+    
+
+    
+    // Create a new session for a specific chat with transcript rehydration
+    private func createSessionForChat(chatId: UUID, upToMessage: UUID? = nil) -> LanguageModelSession {
+        // Get system prompt for this chat
+        let systemPrompt = getChatById(chatId)?.systemPrompt ?? "You are a helpful assistant."
+        
+        // Get messages for transcript rehydration
+        var messagesToInclude: [ChatMessage] = []
+        if let chat = getChatById(chatId) {
+            if let upToMessageId = upToMessage {
+                // When editing, only include messages up to (but not including) the message being edited
+                if let messageIndex = chat.messages.firstIndex(where: { $0.id == upToMessageId }) {
+                    messagesToInclude = Array(chat.messages.prefix(messageIndex))
+                }
+            } else {
+                // Include all messages for full rehydration
+                messagesToInclude = chat.messages
+            }
+        }
+        
+        // Create transcript from existing messages
+        // let transcript = createTranscriptFromMessages(messagesToInclude)
+        
+        // Create session with transcript rehydration
+        // Note: When using transcript, instructions should be included in the transcript itself
+        return LanguageModelSession(
+            // tools: [
+            //     WeatherTool()
+            // ],
+            // transcript: transcript,
+            instructions: systemPrompt
+        )
+    }
+    
+    // Convert ChatMessages to Transcript for session rehydration
+//    private func createTranscriptFromMessages(_ messages: [ChatMessage]) -> Transcript {
+//        let entries: [Transcript.Entry] = messages.compactMap { message in
+//            if message.isUser {
+//                // Create user prompt entry
+//                let textSegment = Transcript.Segment.text(Transcript.TextSegment(content: message.content))
+//                let prompt = Transcript.Prompt(segments: [textSegment])
+//                return .prompt(prompt)
+//            } else {
+//                // Create assistant response entry (only include non-empty responses)
+//                if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+//                    let textSegment = Transcript.Segment.text(Transcript.TextSegment(content: message.content))
+//                    let response = Transcript.Response(assetIDs: [], segments: [textSegment])
+//                    return .response(response)
+//                }
+//                return nil
+//            }
+//        }
+//        
+        // TODO: This builds fine but crashes in 26.0 beta 2
+//        return Transcript.init(entries: entries)
+//    }
+    
+    // Helper method to get chat by ID from either temporary or saved chats
+    private func getChatById(_ chatId: UUID) -> Chat? {
+        if let tempChat = temporaryChat, tempChat.id == chatId {
+            return tempChat
+        }
+        return chats.first { $0.id == chatId }
     }
     
     // Computed property for current chat
@@ -190,7 +251,9 @@ class ChatManager: ObservableObject {
         chat.systemPrompt = systemPrompt
         chat.temperature = temperature
         currentChat = chat
-        updateSession()
+        
+        // Recreate session with new settings and current transcript
+        recreateCurrentSession()
         
         // Also save as defaults
         UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
@@ -204,6 +267,11 @@ class ChatManager: ObservableObject {
         // If we're editing, clear the saved messages (confirming the edit)
         if editingMessageId != nil {
             savedMessagesForEdit = []
+            // After confirming edit, recreate session with full transcript including the new message
+            if let chatId = currentChatId {
+                // We'll recreate the session after adding the new user message
+                // This ensures the transcript includes the edited conversation flow
+            }
         }
         
         // Add user message
@@ -232,10 +300,19 @@ class ChatManager: ObservableObject {
         // Update the chat
         currentChat = chat
         
+        // If we were editing, recreate the session with the full transcript including the new edited flow
+        let wasEditing = editingMessageId != nil
+        
         // Clear input and editing state
         inputText = ""
         editingMessageId = nil
         isLoading = true
+        
+        // Recreate session if we were editing to ensure proper transcript rehydration
+        if wasEditing, let chatId = currentChatId {
+            let newSession = createSessionForChat(chatId: chatId)
+            sessions[chatId] = newSession
+        }
         
         // Send to LLM with streaming
         Task {
@@ -298,6 +375,13 @@ class ChatManager: ObservableObject {
         // Temporarily remove this message and all subsequent messages
         chat.messages.removeAll { $0.timestamp >= message.timestamp }
         currentChat = chat
+        
+        // Recreate the session with transcript up to the edit point
+        if let chatId = currentChatId {
+            let newSession = createSessionForChat(chatId: chatId, upToMessage: messageId)
+            sessions[chatId] = newSession
+        }
+        
         // Don't save yet - we'll save when edit is confirmed or cancelled
     }
     
@@ -315,6 +399,12 @@ class ChatManager: ObservableObject {
         chat.messages.append(contentsOf: savedMessagesForEdit)
         currentChat = chat
         
+        // Recreate the session with the full transcript
+        if let chatId = currentChatId {
+            let newSession = createSessionForChat(chatId: chatId)
+            sessions[chatId] = newSession
+        }
+        
         // Clear editing state
         editingMessageId = nil
         savedMessagesForEdit = []
@@ -328,15 +418,17 @@ class ChatManager: ObservableObject {
         // Each chat maintains its own session to preserve conversation context
         guard let chatId = currentChatId else { return }
         
-        // If session doesn't exist for this chat, it will be created by currentSession computed property
-        // If session exists but system prompt changed, create a new session
-        if let existingSession = sessions[chatId] {
-            // Check if we need to update the session due to system prompt change
-            // For now, we'll keep the existing session to maintain context
-            // In a future enhancement, we could detect system prompt changes and handle them
-        }
-        
-        // The currentSession computed property will handle getting/creating the session
+        // Force recreation of the session to ensure transcript is up to date
+        // This is important when switching between chats or when settings change
+        let newSession = createSessionForChat(chatId: chatId)
+        sessions[chatId] = newSession
+    }
+    
+    // Force recreation of the current session (useful when settings change)
+    func recreateCurrentSession() {
+        guard let chatId = currentChatId else { return }
+        let newSession = createSessionForChat(chatId: chatId)
+        sessions[chatId] = newSession
     }
     
     private func saveChats() {
