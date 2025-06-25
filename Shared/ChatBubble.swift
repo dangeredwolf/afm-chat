@@ -267,31 +267,52 @@ struct ChatBubble: View {
                             }
                         }
                     } else {
-                        // AI messages: rendered markdown with tool calls
+                        // AI messages: rendered markdown with inline tool calls
                         VStack(alignment: .leading, spacing: 8) {
-                            // Show tool calls if present
-                            if message.hasToolCalls {
+                            if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                // Split content into paragraphs and try to place tool calls inline
+                                let contentParts = message.content.components(separatedBy: "\n\n")
+                                let toolCallsToDistribute = message.toolCalls
+                                
+                                // Pre-calculate which tool calls go where to avoid duplicates
+                                let toolCallPlacements = calculateToolCallPlacements(
+                                    contentParts: contentParts,
+                                    toolCalls: toolCallsToDistribute
+                                )
+                                
+                                ForEach(Array(contentParts.enumerated()), id: \.offset) { index, part in
+                                    // Show content part
+                                    if !part.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Markdown(part)
+//                                            .markdownTheme(.gitHub)
+                                            .markdownTextStyle(\.text) {
+                                                ForegroundColor(.primary)
+                                            }
+                                            .markdownTextStyle(\.code) {
+                                                FontFamilyVariant(.monospaced)
+                                                FontSize(.em(0.85))
+                                                ForegroundColor(.primary)
+                                                BackgroundColor(.primary.opacity(0.1))
+                                            }
+                                    }
+                                    
+                                    // Show tool calls assigned to this section
+                                    if let toolCallsForSection = toolCallPlacements[index], !toolCallsForSection.isEmpty {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            ForEach(toolCallsForSection) { toolCall in
+                                                ToolCallView(toolCall: toolCall)
+                                            }
+                                        }
+                                        .padding(.vertical, 4)
+                                    }
+                                }
+                            } else if message.hasToolCalls {
+                                // If no content, just show tool calls
                                 VStack(alignment: .leading, spacing: 6) {
                                     ForEach(message.toolCalls) { toolCall in
                                         ToolCallView(toolCall: toolCall)
                                     }
                                 }
-                                .padding(.bottom, 4)
-                            }
-                            
-                            // Show message content if not empty
-                            if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Markdown(message.content)
-//                                    .markdownTheme(.gitHub)
-                                    .markdownTextStyle(\.text) {
-                                        ForegroundColor(.primary)
-                                    }
-                                    .markdownTextStyle(\.code) {
-                                        FontFamilyVariant(.monospaced)
-                                        FontSize(.em(0.85))
-                                        ForegroundColor(.primary)
-                                        BackgroundColor(.primary.opacity(0.1))
-                                    }
                             }
                         }
                     }
@@ -339,5 +360,82 @@ struct ChatBubble: View {
                 Spacer()
             }
         }
+    }
+    
+    // Distribute tool calls across content sections based on content cues
+    private func getToolCallsForSection(
+        sectionIndex: Int,
+        totalSections: Int,
+        allToolCalls: [ToolCallInfo],
+        sectionContent: String
+    ) -> [ToolCallInfo] {
+        guard !allToolCalls.isEmpty else { return [] }
+        
+        // Debug: print section info (only for non-empty sections)
+        if !sectionContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            print("Section \(sectionIndex): '\(sectionContent.prefix(50))...'")
+        }
+        
+        // Smart strategy: place tool calls based on content cues
+        // Skip empty sections
+        guard !sectionContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return []
+        }
+        
+        // Very simple approach: place tool calls in the middle sections
+        // Avoid first and last sections, distribute evenly in between
+        if totalSections >= 3 && sectionIndex > 0 && sectionIndex < totalSections - 1 {
+            // Calculate which tool call belongs to this middle section
+            let middleSections = totalSections - 2 // Exclude first and last
+            let toolCallIndex = ((sectionIndex - 1) * allToolCalls.count) / middleSections
+            
+            if toolCallIndex < allToolCalls.count && toolCallIndex >= 0 {
+                print("Placing tool call \(toolCallIndex) after middle section \(sectionIndex)")
+                return [allToolCalls[toolCallIndex]]
+            }
+        }
+        
+        // For short conversations (1-2 sections), place all tool calls after first section
+        if totalSections <= 2 && sectionIndex == 0 {
+            print("Placing all \(allToolCalls.count) tool calls after first section in short conversation")
+            return allToolCalls
+        }
+        
+        return []
+    }
+    
+    // Pre-calculate tool call placements to avoid duplicates
+    private func calculateToolCallPlacements(
+        contentParts: [String],
+        toolCalls: [ToolCallInfo]
+    ) -> [Int: [ToolCallInfo]] {
+        var placements: [Int: [ToolCallInfo]] = [:]
+        var usedToolCalls: Set<UUID> = []
+        
+        // Go through each section and determine which tool calls should appear there
+        for (index, part) in contentParts.enumerated() {
+            let toolCallsForSection = getToolCallsForSection(
+                sectionIndex: index,
+                totalSections: contentParts.count,
+                allToolCalls: toolCalls,
+                sectionContent: part
+            )
+            
+            // Filter out already used tool calls
+            let newToolCalls = toolCallsForSection.filter { toolCall in
+                !usedToolCalls.contains(toolCall.id)
+            }
+            
+            if !newToolCalls.isEmpty {
+                placements[index] = newToolCalls
+                
+                // Mark these as used
+                for toolCall in newToolCalls {
+                    usedToolCalls.insert(toolCall.id)
+                }
+            }
+        }
+        
+        return placements
     }
 } 

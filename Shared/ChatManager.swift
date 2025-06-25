@@ -688,7 +688,7 @@ class ChatManager: ObservableObject {
     // Extract tool call information and reconstruct full content from transcript
     private func extractToolCallsFromTranscript() -> ([ToolCallInfo], String) {
         var toolCalls: [ToolCallInfo] = []
-        var toolOutputs: [String: String] = [:] // toolName -> output content
+        var toolOutputs: [String] = [] // Array of outputs in order
         var fullContent = ""
         
         // Access the transcript from the current session
@@ -752,20 +752,20 @@ class ChatManager: ObservableObject {
                     
                 case .toolOutput(let output):
                     let outputContent = extractToolOutputContent(from: output)
-                    toolOutputs[output.toolName] = outputContent
-                    print("Found tool output for: \(output.toolName)")
+                    toolOutputs.append(outputContent)
+                    print("Found tool output for: \(output.toolName) (output #\(toolOutputs.count))")
                     
                 default:
                     print("Entry \(index) is other type")
                 }
             }
             
-            // Second pass: update tool call statuses
+            // Second pass: update tool call statuses by matching order
             for i in toolCalls.indices {
-                if let output = toolOutputs[toolCalls[i].toolName] {
+                if i < toolOutputs.count {
                     toolCalls[i].status = .completed
-                    toolCalls[i].result = output
-                    print("Marked \(toolCalls[i].toolName) as completed")
+                    toolCalls[i].result = toolOutputs[i]
+                    print("Marked tool call \(i) (\(toolCalls[i].toolName)) as completed with result: \(toolOutputs[i].prefix(20))...")
                 }
             }
         }
