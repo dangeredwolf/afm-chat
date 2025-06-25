@@ -6,15 +6,103 @@
 //
 
 import SwiftUI
+import FoundationModels
 
 struct ChatContainerView: View {
     @StateObject private var chatManager = ChatManager()
     @State private var selectedChatId: UUID?
+    @State private var showingModelUnavailableAlert = false
+    
+    private var model = SystemLanguageModel.default
     
     var body: some View {
         NavigationStack {
-            ChatListView(chatManager: chatManager, selectedChatId: $selectedChatId)
+            switch model.availability {
+            case .available:
+                ChatListView(chatManager: chatManager, selectedChatId: $selectedChatId)
+            case .unavailable(.deviceNotEligible):
+                ModelUnavailableView(
+                    title: "Device Not Compatible",
+                    message: "Your device doesn't support Apple Intelligence features. Apple Intelligence requires an A17 Pro, A18, or M1 chip or better.",
+                    icon: "exclamationmark.triangle"
+                )
+            case .unavailable(.appleIntelligenceNotEnabled):
+                ModelUnavailableView(
+                    title: "Apple Intelligence Required",
+                    message: "You need to enable Apple Intelligence in Settings. It might take a few minutes for your device to download the language model.",
+                    icon: "brain.head.profile",
+                    showSettingsButton: true
+                )
+            case .unavailable(.modelNotReady):
+                ModelUnavailableView(
+                    title: "Model Downloading",
+                    message: "The Apple Intelligence language model is currently downloading in the background. Check its status in Settings.",
+                    icon: "arrow.down.circle",
+                    showSettingsButton: true
+                )
+            case .unavailable(let other):
+                ModelUnavailableView(
+                    title: "Model Unavailable",
+                    message: "The Apple Intelligence language model is currently unavailable. Please try again later.\n\nError: \(other)",
+                    icon: "exclamationmark.circle"
+                )
+            }
         }
+    }
+}
+
+struct ModelUnavailableView: View {
+    let title: String
+    let message: String
+    let icon: String
+    let showSettingsButton: Bool
+    
+    init(title: String, message: String, icon: String, showSettingsButton: Bool = false) {
+        self.title = title
+        self.message = message
+        self.icon = icon
+        self.showSettingsButton = showSettingsButton
+    }
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: icon)
+                .font(.system(size: 64))
+                .foregroundColor(.secondary)
+            
+            VStack(spacing: 12) {
+                Text(title)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                
+                Text(message)
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+            }
+            
+            if showSettingsButton {
+                Button(action: openSettings) {
+                    Text("Open Settings")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.accentColor)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+            }
+        }
+        .padding(.horizontal, 32)
+        .navigationTitle("AFM Chat")
+    }
+    
+    private func openSettings() {
+        
+        UIApplication.shared.open(URL(string:"App-prefs:SIRI")!)
     }
 }
 
