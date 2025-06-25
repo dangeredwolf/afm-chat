@@ -10,9 +10,11 @@ import SwiftUI
 struct SettingsView: View {
     @Binding var systemPrompt: String
     @Binding var temperature: Double
+    @Binding var toolsEnabled: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var tempPrompt: String = ""
     @State private var tempTemperature: Double = 1.0
+    @State private var tempToolsEnabled: Bool = true
     let onSave: () -> Void
     
     private let defaultPrompt = "You are a helpful assistant."
@@ -21,7 +23,7 @@ struct SettingsView: View {
         NavigationView {
             Form {
                 Section(header: Text("System Prompt")) {
-                    Text("Customize how the AI assistant behaves by modifying the system prompt below:")
+                    Text("Customize how the language model behaves by modifying the system prompt below:")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
@@ -65,6 +67,33 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                
+                Section(header: Text("Tools")) {
+                    Text("The language model can use tools to enable more advanced functionality such as executing code or retrieving information from your device and the internet.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Toggle("Enable Tools", isOn: $tempToolsEnabled)
+                        .toggleStyle(SwitchToggleStyle())
+                    
+                    if tempToolsEnabled {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Available Tools:")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                            
+                            HStack {
+                                Image(systemName: "gear")
+                                    .foregroundColor(.blue)
+                                Text("Code Interpreter")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -79,6 +108,7 @@ struct SettingsView: View {
                     Button("Save") {
                         systemPrompt = tempPrompt
                         temperature = tempTemperature
+                        toolsEnabled = tempToolsEnabled
                         onSave()
                         dismiss()
                     }
@@ -89,6 +119,7 @@ struct SettingsView: View {
         .onAppear {
             tempPrompt = systemPrompt
             tempTemperature = temperature
+            tempToolsEnabled = toolsEnabled
         }
     }
 }

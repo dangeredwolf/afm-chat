@@ -201,7 +201,8 @@ struct ChatDetailView: View {
                         set: { newPrompt in
                             chatManager.updateChatSettings(
                                 systemPrompt: newPrompt,
-                                temperature: chatManager.currentTemperature
+                                temperature: chatManager.currentTemperature,
+                                toolsEnabled: chatManager.currentToolsEnabled
                             )
                         }
                     ),
@@ -210,7 +211,18 @@ struct ChatDetailView: View {
                         set: { newTemperature in
                             chatManager.updateChatSettings(
                                 systemPrompt: chatManager.currentSystemPrompt,
-                                temperature: newTemperature
+                                temperature: newTemperature,
+                                toolsEnabled: chatManager.currentToolsEnabled
+                            )
+                        }
+                    ),
+                    toolsEnabled: Binding(
+                        get: { chatManager.currentToolsEnabled },
+                        set: { newToolsEnabled in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                toolsEnabled: newToolsEnabled
                             )
                         }
                     ),
@@ -240,6 +252,7 @@ struct GlobalSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var defaultPrompt: String = ""
     @State private var defaultTemperature: Double = 1.0
+    @State private var defaultToolsEnabled: Bool = true
     
     var body: some View {
         NavigationView {
@@ -266,6 +279,33 @@ struct GlobalSettingsView: View {
                         Slider(value: $defaultTemperature, in: 0.0...2.0, step: 0.1)
                     }
                 }
+                
+                Section(header: Text("Tools")) {
+                    Text("Set the default tools behavior for new chats. This controls whether new chats will have access to tools like code execution and information lookup.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Toggle("Enable Tools by Default", isOn: $defaultToolsEnabled)
+                        .toggleStyle(SwitchToggleStyle())
+                    
+                    if defaultToolsEnabled {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Available Tools:")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                            
+                            HStack {
+                                Image(systemName: "gear")
+                                    .foregroundColor(.blue)
+                                Text("Code Interpreter")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -280,6 +320,7 @@ struct GlobalSettingsView: View {
                     Button("Save") {
                         UserDefaults.standard.set(defaultPrompt, forKey: "systemPrompt")
                         UserDefaults.standard.set(defaultTemperature, forKey: "temperature")
+                        UserDefaults.standard.set(defaultToolsEnabled, forKey: "toolsEnabled")
                         dismiss()
                     }
                 }
@@ -288,6 +329,7 @@ struct GlobalSettingsView: View {
         .onAppear {
             defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
             defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
+            defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? true
         }
     }
 }

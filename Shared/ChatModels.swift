@@ -216,17 +216,51 @@ extension ChatMessage: Codable {
 }
 
 struct Chat: Identifiable, Codable {
-    let id = UUID()
+    let id: UUID
     var title: String
-    var messages: [ChatMessage] = []
-    let createdAt = Date()
+    var messages: [ChatMessage]
+    let createdAt: Date
     var systemPrompt: String
     var temperature: Double
+    var toolsEnabled: Bool
     
-    init(title: String = "New Chat", systemPrompt: String = "You are a helpful assistant.", temperature: Double = 1.0) {
+    init(title: String = "New Chat", systemPrompt: String = "You are a helpful assistant.", temperature: Double = 1.0, toolsEnabled: Bool = true) {
+        self.id = UUID()
         self.title = title
+        self.messages = []
+        self.createdAt = Date()
         self.systemPrompt = systemPrompt
         self.temperature = temperature
+        self.toolsEnabled = toolsEnabled
+    }
+    
+    // Custom Codable implementation for backward compatibility
+    private enum CodingKeys: String, CodingKey {
+        case id, title, messages, createdAt, systemPrompt, temperature, toolsEnabled
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Decode all properties, providing defaults for missing ones
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.title = try container.decode(String.self, forKey: .title)
+        self.messages = try container.decodeIfPresent([ChatMessage].self, forKey: .messages) ?? []
+        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        self.systemPrompt = try container.decode(String.self, forKey: .systemPrompt)
+        self.temperature = try container.decode(Double.self, forKey: .temperature)
+        self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? true // Default to true for old chats
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(messages, forKey: .messages)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(systemPrompt, forKey: .systemPrompt)
+        try container.encode(temperature, forKey: .temperature)
+        try container.encode(toolsEnabled, forKey: .toolsEnabled)
     }
     
     // Generate a fallback title based on the first user message (used if AI generation fails)

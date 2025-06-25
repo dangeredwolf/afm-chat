@@ -83,12 +83,14 @@ class ChatManager: ObservableObject {
     
     // Create a new session for a specific chat with transcript rehydration
     private func createSessionForChat(chatId: UUID, upToMessage: UUID? = nil) -> LanguageModelSession {
-        // Get system prompt for this chat
-        let systemPrompt = getChatById(chatId)?.systemPrompt ?? "You are a helpful assistant."
+        // Get system prompt and tools setting for this chat
+        let chat = getChatById(chatId)
+        let systemPrompt = chat?.systemPrompt ?? "You are a helpful assistant."
+        let toolsEnabled = chat?.toolsEnabled ?? true
         
         // Get messages for transcript rehydration
         var messagesToInclude: [ChatMessage] = []
-        if let chat = getChatById(chatId) {
+        if let chat = chat {
             if let upToMessageId = upToMessage {
                 // When editing, only include messages up to (but not including) the message being edited
                 if let messageIndex = chat.messages.firstIndex(where: { $0.id == upToMessageId }) {
@@ -103,13 +105,16 @@ class ChatManager: ObservableObject {
         // Create transcript from existing messages
         // let transcript = createTranscriptFromMessages(messagesToInclude)
         
+        // Create session with conditional tools based on chat settings
+        let tools: [any Tool] = toolsEnabled ? [
+//                SafeWeatherTool(),
+                SafeJavaScriptTool()
+            ] : []
+        
         // Create session with transcript rehydration
         // Note: When using transcript, instructions should be included in the transcript itself
         return LanguageModelSession(
-            tools: [
-//                SafeWeatherTool(),
-                SafeJavaScriptTool()
-            ],
+            tools: tools,
             // transcript: transcript,
             instructions: systemPrompt
         )
@@ -193,6 +198,10 @@ class ChatManager: ObservableObject {
         return currentChat?.temperature ?? 1.0
     }
     
+    var currentToolsEnabled: Bool {
+        return currentChat?.toolsEnabled ?? true
+    }
+    
     init() {
         loadChats()
         
@@ -205,8 +214,9 @@ class ChatManager: ObservableObject {
         // Get default settings from UserDefaults or use defaults
         let defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
         let defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
+        let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? true
         
-        let newChat = Chat(systemPrompt: defaultPrompt, temperature: defaultTemperature)
+        let newChat = Chat(systemPrompt: defaultPrompt, temperature: defaultTemperature, toolsEnabled: defaultToolsEnabled)
         
         // Store as temporary chat (not saved until first message)
         temporaryChat = newChat
@@ -247,10 +257,11 @@ class ChatManager: ObservableObject {
         saveChats()
     }
     
-    func updateChatSettings(systemPrompt: String, temperature: Double) {
+    func updateChatSettings(systemPrompt: String, temperature: Double, toolsEnabled: Bool) {
         guard var chat = currentChat else { return }
         chat.systemPrompt = systemPrompt
         chat.temperature = temperature
+        chat.toolsEnabled = toolsEnabled
         currentChat = chat
         
         // Recreate session with new settings and current transcript
@@ -259,6 +270,7 @@ class ChatManager: ObservableObject {
         // Also save as defaults
         UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
         UserDefaults.standard.set(temperature, forKey: "temperature")
+        UserDefaults.standard.set(toolsEnabled, forKey: "toolsEnabled")
     }
     
     func sendMessage() {
@@ -448,13 +460,25 @@ class ChatManager: ObservableObject {
                 // Try to recover by clearing the corrupted data
                 // Note: This will lose the old chats, but prevents app crashes
                 UserDefaults.standard.removeObject(forKey: "savedChats")
-                self.chats = []
                 
-                // Optionally, we could try to backup the corrupted data
+                // Backup the corrupted data before clearing
                 let backupKey = "savedChats_backup_\(Date().timeIntervalSince1970)"
                 UserDefaults.standard.set(data, forKey: backupKey)
                 print("Corrupted data backed up to key: \(backupKey)")
-                print("Your previous chats were backed up but couldn't be loaded due to model changes.")
+                
+                // Try to automatically recover from this backup
+                self.chats = []
+                print("Attempting automatic recovery...")
+                if let recoveredChats = tryDecodeBackupData(data) {
+                    self.chats = recoveredChats
+                    saveChats() // Save in the new format
+                    print("Successfully auto-recovered \(recoveredChats.count) chats!")
+                    // Clean up the backup since we recovered successfully
+                    UserDefaults.standard.removeObject(forKey: backupKey)
+                } else {
+                    print("Automatic recovery failed. Your previous chats were backed up but couldn't be loaded due to model changes.")
+                    print("You can try manual recovery by calling tryRecoverChats() if needed.")
+                }
             }
         }
     }
@@ -468,6 +492,7 @@ class ChatManager: ObservableObject {
     }
     
     // Try to recover chats from backup (called manually if needed)
+    @MainActor
     func tryRecoverChats() {
         let userDefaults = UserDefaults.standard
         let allKeys = userDefaults.dictionaryRepresentation().keys
