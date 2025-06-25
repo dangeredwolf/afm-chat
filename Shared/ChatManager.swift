@@ -111,6 +111,8 @@ class ChatManager: ObservableObject {
                 JavaScriptTool()
             ] : []
         
+        print("Creating session with \(tools.count) tools, toolsEnabled: \(toolsEnabled)")
+        
         // Create session with transcript rehydration
         // Note: When using transcript, instructions should be included in the transcript itself
         return LanguageModelSession(
@@ -588,38 +590,35 @@ class ChatManager: ObservableObject {
             
             var currentResponse = ""
             var responseCount = 0
-            var accumulatedContent = "" // Track the longest content we've accumulated
+            var maxContentLength = 0
+            var longestResponse = ""
             
             for try await response in responseStream {
                 responseCount += 1
                 print("Response chunk \(responseCount): \(response.prefix(50))...")
                 await MainActor.run {
-                    // Keep track of the longest content we've seen
-                    // This prevents tool execution from erasing accumulated content
-                    if response.count > accumulatedContent.count {
-                        accumulatedContent = response
-                        currentResponse = response
-                        print("Updated content to \(response.count) chars")
-                    } else if response.count < accumulatedContent.count {
-                        // If new response is shorter, it might be a tool execution reset
-                        // Keep the accumulated content but update current response
-                        currentResponse = response
-                        print("Keeping accumulated content (\(accumulatedContent.count) chars) vs new response (\(response.count) chars)")
-                    } else {
-                        // Same length, use the new response
-                        currentResponse = response
-                        accumulatedContent = response
+                    currentResponse = response
+                    
+                    // Track the longest response we've seen to preserve content
+                    if response.count > maxContentLength {
+                        maxContentLength = response.count
+                        longestResponse = response
+                        print("New longest response: \(response.count) chars")
                     }
                     
-                    // Try to extract tool call information from the session's transcript
+                    // Try to extract tool call information and full content from the session's transcript
                     // But don't let this block the response if it fails
+                    var transcriptContent = ""
                     do {
-                        let extractedToolCalls = self.extractToolCallsFromTranscript()
+                        let (extractedToolCalls, extractedContent) = self.extractToolCallsFromTranscript()
+                        print("Extracted \(extractedToolCalls.count) tool calls")
+                        transcriptContent = extractedContent
                         
                         // Keep track of tool calls - once we see them, keep showing them
                         if !extractedToolCalls.isEmpty {
                             hasSeenToolCalls = true
                             lastToolCalls = extractedToolCalls
+                            print("Updated lastToolCalls with \(lastToolCalls.count) calls")
                         }
                     } catch {
                         print("Tool extraction failed: \(error)")
@@ -628,15 +627,23 @@ class ChatManager: ObservableObject {
                     
                     // Use the tool calls we've seen (even if current extraction failed)
                     let toolCallsToShow = hasSeenToolCalls ? lastToolCalls : []
+                    print("Showing \(toolCallsToShow.count) tool calls in UI")
                     
                     // Update the current chat's last message
-                    // Use accumulated content to prevent erasure during tool execution
-                    let contentToShow = accumulatedContent.count > currentResponse.count ? accumulatedContent : currentResponse
+                    // Use transcript content if available and longer, otherwise use response stream content
+                    let finalContent: String
+                    if !transcriptContent.isEmpty && transcriptContent.count >= currentResponse.count {
+                        finalContent = transcriptContent
+                        print("Using transcript content (\(transcriptContent.count) chars)")
+                    } else {
+                        finalContent = longestResponse.count > currentResponse.count ? longestResponse : currentResponse
+                        print("Using response stream content (\(finalContent.count) chars)")
+                    }
                     
                     if var currentChat = self.currentChat {
                         if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
                             currentChat.messages[lastIndex] = ChatMessage(
-                                content: contentToShow,
+                                content: finalContent,
                                 isUser: false,
                                 toolCalls: toolCallsToShow
                             )
@@ -678,10 +685,11 @@ class ChatManager: ObservableObject {
         }
     }
     
-    // Extract tool call information from the session's transcript
-    private func extractToolCallsFromTranscript() -> [ToolCallInfo] {
+    // Extract tool call information and reconstruct full content from transcript
+    private func extractToolCallsFromTranscript() -> ([ToolCallInfo], String) {
         var toolCalls: [ToolCallInfo] = []
         var toolOutputs: [String: String] = [:] // toolName -> output content
+        var fullContent = ""
         
         // Access the transcript from the current session
         let transcript = currentSession.transcript
@@ -700,14 +708,36 @@ class ChatManager: ObservableObject {
         
         print("Last prompt index: \(lastPromptIndex)")
         
-        // Collect tool calls and outputs that occurred after the last prompt
+        // Collect tool calls, outputs, and responses that occurred after the last prompt
         if lastPromptIndex >= 0 && lastPromptIndex < entries.count - 1 {
             let relevantEntries = Array(entries[(lastPromptIndex + 1)...])
             print("Processing \(relevantEntries.count) relevant entries")
             
-            // First pass: collect tool calls
-            for entry in relevantEntries {
-                if case .toolCalls(let calls) = entry {
+            // First pass: collect tool calls and build full content
+            for (index, entry) in relevantEntries.enumerated() {
+                print("Entry \(index): \(entry)")
+                
+                switch entry {
+                case .response(let response):
+                    // Add response content to full content
+                    let responseText = response.segments.compactMap { segment in
+                        switch segment {
+                        case .text(let textSegment):
+                            return textSegment.content
+                        default:
+                            return nil
+                        }
+                    }.joined(separator: "")
+                    
+                    if !responseText.isEmpty {
+                        if !fullContent.isEmpty {
+                            fullContent += "\n\n"
+                        }
+                        fullContent += responseText
+                        print("Added response content: \(responseText.prefix(50))...")
+                    }
+                    
+                case .toolCalls(let calls):
                     print("Found \(calls.count) tool calls")
                     for call in calls {
                         let toolCall = ToolCallInfo(
@@ -719,19 +749,18 @@ class ChatManager: ObservableObject {
                         toolCalls.append(toolCall)
                         print("Added tool call: \(call.toolName)")
                     }
-                }
-            }
-            
-            // Second pass: collect tool outputs
-            for entry in relevantEntries {
-                if case .toolOutput(let output) = entry {
+                    
+                case .toolOutput(let output):
                     let outputContent = extractToolOutputContent(from: output)
                     toolOutputs[output.toolName] = outputContent
                     print("Found tool output for: \(output.toolName)")
+                    
+                default:
+                    print("Entry \(index) is other type")
                 }
             }
             
-            // Third pass: update tool call statuses
+            // Second pass: update tool call statuses
             for i in toolCalls.indices {
                 if let output = toolOutputs[toolCalls[i].toolName] {
                     toolCalls[i].status = .completed
@@ -741,8 +770,8 @@ class ChatManager: ObservableObject {
             }
         }
         
-        print("Returning \(toolCalls.count) tool calls")
-        return toolCalls
+        print("Returning \(toolCalls.count) tool calls and content: \(fullContent.prefix(100))...")
+        return (toolCalls, fullContent)
     }
     
     // Get tool description for a given tool name

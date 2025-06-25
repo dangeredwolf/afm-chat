@@ -109,7 +109,7 @@ struct _JavaScriptTool: Tool {
 /// Safe wrapper for JavaScript tool that handles errors gracefully
 struct JavaScriptTool: Tool {
     let name = "Code Interpreter"
-    let description = "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc. Console logs are not currently displayed at this time, so you should return necessary values instead."
+    let description = "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc."
     
     private let jsTool = _JavaScriptTool()
     
