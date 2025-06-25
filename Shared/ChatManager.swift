@@ -106,9 +106,9 @@ class ChatManager: ObservableObject {
         // Create session with transcript rehydration
         // Note: When using transcript, instructions should be included in the transcript itself
         return LanguageModelSession(
-            // tools: [
-            //     WeatherTool()
-            // ],
+            tools: [
+                WeatherTool()
+            ],
             // transcript: transcript,
             instructions: systemPrompt
         )
@@ -338,10 +338,11 @@ class ChatManager: ObservableObject {
                 }
             } catch {
                 await MainActor.run {
-                    // Replace the placeholder with error message
+                    // Replace the placeholder with proper error handling
                     if var currentChat = self.currentChat {
                         if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                            currentChat.messages[lastIndex] = ChatMessage(content: "Error calling FoundationModel: \(error.localizedDescription)", isUser: false)
+                            let chatError = ChatError.fromFoundationModelsError(error)
+                            currentChat.messages[lastIndex] = ChatMessage(content: chatError.description, isUser: false, error: chatError)
                             self.currentChat = currentChat
                         }
                     }
@@ -390,6 +391,68 @@ class ChatManager: ObservableObject {
               let message = chat.messages.first(where: { $0.id == messageId }) else { return }
         
         UIPasteboard.general.string = message.content
+    }
+    
+    func retryMessage(_ messageId: UUID) {
+        guard var chat = currentChat,
+              let messageIndex = chat.messages.firstIndex(where: { $0.id == messageId }),
+              !chat.messages[messageIndex].isUser,
+              chat.messages[messageIndex].isError else { return }
+        
+        // Find the user message that triggered this error response
+        let errorMessageTimestamp = chat.messages[messageIndex].timestamp
+        guard let userMessageIndex = chat.messages.lastIndex(where: { $0.isUser && $0.timestamp < errorMessageTimestamp }) else { return }
+        
+        let userMessage = chat.messages[userMessageIndex].content
+        
+        // Remove the error message
+        chat.messages.remove(at: messageIndex)
+        
+        // Create new placeholder for retry
+        let aiMessage = ChatMessage(content: "", isUser: false)
+        chat.messages.append(aiMessage)
+        
+        // Update the chat
+        currentChat = chat
+        isLoading = true
+        
+        // Retry the request
+        Task {
+            do {
+                let generationOptions = GenerationOptions(temperature: chat.temperature)
+                let responseStream = currentSession.streamResponse(to: userMessage, options: generationOptions)
+                
+                for try await response in responseStream {
+                    await MainActor.run {
+                        // Update the current chat's last message
+                        if var currentChat = self.currentChat {
+                            if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
+                                currentChat.messages[lastIndex] = ChatMessage(content: response, isUser: false)
+                                self.currentChat = currentChat
+                            }
+                        }
+                    }
+                }
+                
+                await MainActor.run {
+                    self.isLoading = false
+                    self.saveChats()
+                }
+            } catch {
+                await MainActor.run {
+                    // Replace the placeholder with proper error handling
+                    if var currentChat = self.currentChat {
+                        if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
+                            let chatError = ChatError.fromFoundationModelsError(error)
+                            currentChat.messages[lastIndex] = ChatMessage(content: chatError.description, isUser: false, error: chatError)
+                            self.currentChat = currentChat
+                        }
+                    }
+                    self.isLoading = false
+                    self.saveChats()
+                }
+            }
+        }
     }
     
     func cancelEditing() {
@@ -483,7 +546,9 @@ class ChatManager: ObservableObject {
                     }
                 }
             } catch {
-                print("Failed to generate AI title: \(error)")
+                // Log the specific error type for better debugging
+                let chatError = ChatError.fromFoundationModelsError(error)
+                print("Failed to generate AI title: \(chatError.title) - \(chatError.description)")
                 // Fallback title is already set, so we don't need to do anything
             }
         }

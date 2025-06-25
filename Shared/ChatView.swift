@@ -61,6 +61,9 @@ struct ChatView: View {
                                     },
                                     onCopy: { messageId in
                                         chatManager.copyMessage(messageId)
+                                    },
+                                    onRetry: { messageId in
+                                        chatManager.retryMessage(messageId)
                                     }
                                 )
                                 .id(message.id)
