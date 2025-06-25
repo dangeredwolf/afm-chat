@@ -3,7 +3,7 @@ import JavaScriptCore
 import Foundation
 
 /// A tool that executes JavaScript code using JavaScriptCore
-struct JavaScriptTool: Tool {
+struct _JavaScriptTool: Tool {
     let name = "executeJavaScript"
     let description = "Execute JavaScript code and return the result"
     
@@ -107,11 +107,11 @@ struct JavaScriptTool: Tool {
 }
 
 /// Safe wrapper for JavaScript tool that handles errors gracefully
-struct SafeJavaScriptTool: Tool {
+struct JavaScriptTool: Tool {
     let name = "Code Interpreter"
-    let description = "Assist the user using JavaScript to perform advanced calculations, data analysis, web requests, etc."
+    let description = "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc. Console logs are not currently displayed at this time, so you should return necessary values instead."
     
-    private let jsTool = JavaScriptTool()
+    private let jsTool = _JavaScriptTool()
     
     @Generable
     struct Arguments {
@@ -121,7 +121,7 @@ struct SafeJavaScriptTool: Tool {
     
     func call(arguments: Arguments) async throws -> ToolOutput {
         do {
-            let jsArgs = JavaScriptTool.Arguments(code: arguments.code)
+            let jsArgs = _JavaScriptTool.Arguments(code: arguments.code)
             return try await jsTool.call(arguments: jsArgs)
         } catch {
             return ToolOutput(error.localizedDescription)

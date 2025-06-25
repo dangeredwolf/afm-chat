@@ -346,10 +346,10 @@ struct ChatRowView: View {
                     .font(.headline)
                     .lineLimit(1)
                     .foregroundColor(.primary)
-                Spacer()
-                Text(chat.createdAt, style: .date)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                // Spacer()
+                // Text(chat.createdAt, style: .date)
+                //     .font(.caption)
+                //     .foregroundColor(.secondary)
             }
             
             if let lastMessage = chat.messages.last {

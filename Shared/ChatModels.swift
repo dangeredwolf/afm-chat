@@ -246,7 +246,16 @@ struct Chat: Identifiable, Codable {
         self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         self.title = try container.decode(String.self, forKey: .title)
         self.messages = try container.decodeIfPresent([ChatMessage].self, forKey: .messages) ?? []
-        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        
+        // For createdAt, try to use the earliest message timestamp if createdAt is missing
+        if let savedCreatedAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) {
+            self.createdAt = savedCreatedAt
+        } else {
+            // Fallback: use the earliest message timestamp, or current date if no messages
+            let earliestMessageDate = self.messages.map(\.timestamp).min()
+            self.createdAt = earliestMessageDate ?? Date()
+        }
+        
         self.systemPrompt = try container.decode(String.self, forKey: .systemPrompt)
         self.temperature = try container.decode(Double.self, forKey: .temperature)
         self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? true // Default to true for old chats

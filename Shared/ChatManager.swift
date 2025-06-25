@@ -108,7 +108,7 @@ class ChatManager: ObservableObject {
         // Create session with conditional tools based on chat settings
         let tools: [any Tool] = toolsEnabled ? [
 //                SafeWeatherTool(),
-                SafeJavaScriptTool()
+                JavaScriptTool()
             ] : []
         
         // Create session with transcript rehydration
@@ -580,33 +580,69 @@ class ChatManager: ObservableObject {
     // Process LLM response with real tool call information from transcript
     private func processLLMResponse(userMessage: String, chat: Chat) async {
         var lastToolCalls: [ToolCallInfo] = []
+        var hasSeenToolCalls = false
         
         do {
             let generationOptions = GenerationOptions(temperature: chat.temperature)
             let responseStream = currentSession.streamResponse(to: userMessage, options: generationOptions)
             
             var currentResponse = ""
+            var responseCount = 0
+            var accumulatedContent = "" // Track the longest content we've accumulated
             
             for try await response in responseStream {
+                responseCount += 1
+                print("Response chunk \(responseCount): \(response.prefix(50))...")
                 await MainActor.run {
-                    currentResponse = response
+                    // Keep track of the longest content we've seen
+                    // This prevents tool execution from erasing accumulated content
+                    if response.count > accumulatedContent.count {
+                        accumulatedContent = response
+                        currentResponse = response
+                        print("Updated content to \(response.count) chars")
+                    } else if response.count < accumulatedContent.count {
+                        // If new response is shorter, it might be a tool execution reset
+                        // Keep the accumulated content but update current response
+                        currentResponse = response
+                        print("Keeping accumulated content (\(accumulatedContent.count) chars) vs new response (\(response.count) chars)")
+                    } else {
+                        // Same length, use the new response
+                        currentResponse = response
+                        accumulatedContent = response
+                    }
                     
-                    // Extract tool call information from the session's transcript
-                    let extractedToolCalls = self.extractToolCallsFromTranscript()
+                    // Try to extract tool call information from the session's transcript
+                    // But don't let this block the response if it fails
+                    do {
+                        let extractedToolCalls = self.extractToolCallsFromTranscript()
+                        
+                        // Keep track of tool calls - once we see them, keep showing them
+                        if !extractedToolCalls.isEmpty {
+                            hasSeenToolCalls = true
+                            lastToolCalls = extractedToolCalls
+                        }
+                    } catch {
+                        print("Tool extraction failed: \(error)")
+                        // Continue without tool calls if extraction fails
+                    }
+                    
+                    // Use the tool calls we've seen (even if current extraction failed)
+                    let toolCallsToShow = hasSeenToolCalls ? lastToolCalls : []
                     
                     // Update the current chat's last message
+                    // Use accumulated content to prevent erasure during tool execution
+                    let contentToShow = accumulatedContent.count > currentResponse.count ? accumulatedContent : currentResponse
+                    
                     if var currentChat = self.currentChat {
                         if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
                             currentChat.messages[lastIndex] = ChatMessage(
-                                content: currentResponse,
+                                content: contentToShow,
                                 isUser: false,
-                                toolCalls: extractedToolCalls
+                                toolCalls: toolCallsToShow
                             )
                             self.currentChat = currentChat
                         }
                     }
-                    
-                    lastToolCalls = extractedToolCalls
                 }
             }
             
@@ -645,37 +681,67 @@ class ChatManager: ObservableObject {
     // Extract tool call information from the session's transcript
     private func extractToolCallsFromTranscript() -> [ToolCallInfo] {
         var toolCalls: [ToolCallInfo] = []
+        var toolOutputs: [String: String] = [:] // toolName -> output content
         
         // Access the transcript from the current session
         let transcript = currentSession.transcript
+        let entries = Array(transcript)
         
-        // Look for tool calls and tool outputs in the transcript entries
-        for entry in transcript {
-            switch entry {
-            case .toolCalls(let calls):
-                // Convert FoundationModels tool calls to our ToolCallInfo format
-                for call in calls {
-                    let toolCall = ToolCallInfo(
-                        toolName: call.toolName,
-                        toolDescription: getToolDescription(for: call.toolName),
-                        arguments: String(describing: call.arguments),
-                        status: .executing // Initially executing
-                    )
-                    toolCalls.append(toolCall)
-                }
-                
-            case .toolOutput(let output):
-                // Find the corresponding tool call and mark it as completed
-                if let index = toolCalls.firstIndex(where: { $0.toolName == output.toolName }) {
-                    toolCalls[index].status = .completed
-                    toolCalls[index].result = extractToolOutputContent(from: output)
-                }
-                
-            default:
+        print("Transcript has \(entries.count) entries")
+        
+        // Find the most recent user prompt index
+        var lastPromptIndex = -1
+        for (index, entry) in entries.enumerated().reversed() {
+            if case .prompt(_) = entry {
+                lastPromptIndex = index
                 break
             }
         }
         
+        print("Last prompt index: \(lastPromptIndex)")
+        
+        // Collect tool calls and outputs that occurred after the last prompt
+        if lastPromptIndex >= 0 && lastPromptIndex < entries.count - 1 {
+            let relevantEntries = Array(entries[(lastPromptIndex + 1)...])
+            print("Processing \(relevantEntries.count) relevant entries")
+            
+            // First pass: collect tool calls
+            for entry in relevantEntries {
+                if case .toolCalls(let calls) = entry {
+                    print("Found \(calls.count) tool calls")
+                    for call in calls {
+                        let toolCall = ToolCallInfo(
+                            toolName: call.toolName,
+                            toolDescription: getToolDescription(for: call.toolName),
+                            arguments: String(describing: call.arguments),
+                            status: .executing
+                        )
+                        toolCalls.append(toolCall)
+                        print("Added tool call: \(call.toolName)")
+                    }
+                }
+            }
+            
+            // Second pass: collect tool outputs
+            for entry in relevantEntries {
+                if case .toolOutput(let output) = entry {
+                    let outputContent = extractToolOutputContent(from: output)
+                    toolOutputs[output.toolName] = outputContent
+                    print("Found tool output for: \(output.toolName)")
+                }
+            }
+            
+            // Third pass: update tool call statuses
+            for i in toolCalls.indices {
+                if let output = toolOutputs[toolCalls[i].toolName] {
+                    toolCalls[i].status = .completed
+                    toolCalls[i].result = output
+                    print("Marked \(toolCalls[i].toolName) as completed")
+                }
+            }
+        }
+        
+        print("Returning \(toolCalls.count) tool calls")
         return toolCalls
     }
     

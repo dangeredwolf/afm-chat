@@ -310,6 +310,11 @@ struct ChatBubble: View {
                 .cornerRadius(16)
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
                 .contextMenu {
+                    Button(action: {
+                        onCopy?(message.id)
+                    }) {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
                     if message.isUser {
                         Button(action: {
                             onEdit?(message.id)
@@ -321,17 +326,6 @@ struct ChatBubble: View {
                             onRetry?(message.id)
                         }) {
                             Label("Retry", systemImage: "arrow.clockwise")
-                        }
-                        Button(action: {
-                            onCopy?(message.id)
-                        }) {
-                            Label("Copy Error", systemImage: "doc.on.doc")
-                        }
-                    } else {
-                        Button(action: {
-                            onCopy?(message.id)
-                        }) {
-                            Label("Copy", systemImage: "doc.on.doc")
                         }
                     }
                 }
