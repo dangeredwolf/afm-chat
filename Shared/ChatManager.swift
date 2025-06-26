@@ -52,9 +52,9 @@ class ChatManager: ObservableObject {
             - "How to bake chocolate cookies" → "Chocolate Cookie Recipe"
             - "What's the weather like today?" → "Today's Weather Forecast"
             - "Help me write a resume" → "Resume Writing Help"
-            - "Explicar la física cuántica" → "Explicación de la Física Cuántica"
+            - "Explain quantum mechanics to me." → "Explanation of Quantum Mechanics"
             - "Plan a trip to Japan" → "Japan Travel Planning"
-            - "Hola" - "Saludo de Usuario"
+            - "Hello" - "User Greetings"
             
             Respond with only the title in the same language as the original message, no additional text or punctuation.
             """)
@@ -108,7 +108,8 @@ class ChatManager: ObservableObject {
         // Create session with conditional tools based on chat settings
         let tools: [any Tool] = toolsEnabled ? [
 //                SafeWeatherTool(),
-                JavaScriptTool()
+                JavaScriptTool(),
+                LocationTool()
             ] : []
         
         print("Creating session with \(tools.count) tools, toolsEnabled: \(toolsEnabled)")
@@ -781,6 +782,8 @@ class ChatManager: ObservableObject {
             return "Retrieve the latest weather information for a city"
         case "Code Interpreter":
             return "Execute JavaScript code and returns the result"
+        case "Location":
+            return "Get the user's current location (coarse by default for privacy, with option for precise location)"
         default:
             return "Execute tool: \(toolName)"
         }

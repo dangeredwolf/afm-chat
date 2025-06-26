@@ -4,8 +4,8 @@ import Foundation
 
 /// A tool that executes JavaScript code using JavaScriptCore
 struct _JavaScriptTool: Tool {
-    let name = "executeJavaScript"
-    let description = "Execute JavaScript code and return the result"
+    let name = "Code Interpreter"
+    let description = "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc."
     
     @Generable
     struct Arguments {

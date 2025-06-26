@@ -302,6 +302,14 @@ struct GlobalSettingsView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
+                            
+                            HStack {
+                                Image(systemName: "location")
+                                    .foregroundColor(.green)
+                                Text("Location Services")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                         .padding(.top, 4)
                     }

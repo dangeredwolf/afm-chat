@@ -25,6 +25,8 @@
 		3658A6972DFBA8A500254350 /* Weather.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3658A6942DFBA8A500254350 /* Weather.swift */; };
 		36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
+		36CBE63B2E0B94F300FE3FD4 /* LocationTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */; };
+		36CBE63C2E0B94F300FE3FD4 /* LocationTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */; };
 		36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = 36D70A042DF9482B006889A7 /* appclip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -62,6 +64,7 @@
 		3658A6942DFBA8A500254350 /* Weather.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Weather.swift; sourceTree = "<group>"; };
 		36A7A3FC2DF923BC00B52461 /* afm-chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "afm-chat.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptTool.swift; sourceTree = "<group>"; };
+		36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTool.swift; sourceTree = "<group>"; };
 		36D70A042DF9482B006889A7 /* appclip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = appclip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -139,6 +142,7 @@
 			isa = PBXGroup;
 			children = (
 				36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */,
+				36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */,
 				3658A6942DFBA8A500254350 /* Weather.swift */,
 			);
 			path = Tools;
@@ -284,6 +288,7 @@
 				3658A6262DF9E89C00254350 /* SettingsView.swift in Sources */,
 				3658A6272DF9E89C00254350 /* ChatView.swift in Sources */,
 				36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
+				36CBE63B2E0B94F300FE3FD4 /* LocationTool.swift in Sources */,
 				3658A65E2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -299,6 +304,7 @@
 				3658A62B2DF9E89C00254350 /* SettingsView.swift in Sources */,
 				3658A62C2DF9E89C00254350 /* ChatView.swift in Sources */,
 				36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
+				36CBE63C2E0B94F300FE3FD4 /* LocationTool.swift in Sources */,
 				3658A65F2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -451,6 +457,7 @@
 				INFOPLIST_FILE = "afm-chat/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optionally allow the language model to access your location to answer location-related questions.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -491,6 +498,7 @@
 				INFOPLIST_FILE = "afm-chat/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Optionally allow the language model to access your location to answer location-related questions.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
