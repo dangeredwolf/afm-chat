@@ -23,6 +23,10 @@
 		3658A6612DF9F04E00254350 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3658A6602DF9F04E00254350 /* MarkdownUI */; };
 		3658A6962DFBA8A500254350 /* Weather.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3658A6942DFBA8A500254350 /* Weather.swift */; };
 		3658A6972DFBA8A500254350 /* Weather.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3658A6942DFBA8A500254350 /* Weather.swift */; };
+		36984D5E2E45DB6A00CDC79C /* AFMClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D5B2E45DB6A00CDC79C /* AFMClient.swift */; };
+		36984D5F2E45DB6A00CDC79C /* LLMTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */; };
+		36984D602E45DB6A00CDC79C /* AFMClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D5B2E45DB6A00CDC79C /* AFMClient.swift */; };
+		36984D612E45DB6A00CDC79C /* LLMTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */; };
 		36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36CBE63B2E0B94F300FE3FD4 /* LocationTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */; };
@@ -66,6 +70,8 @@
 		3658A6212DF9E89C00254350 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		3658A65D2DF9EE1A00254350 /* ChatManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatManager.swift; sourceTree = "<group>"; };
 		3658A6942DFBA8A500254350 /* Weather.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Weather.swift; sourceTree = "<group>"; };
+		36984D5B2E45DB6A00CDC79C /* AFMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMClient.swift; sourceTree = "<group>"; };
+		36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMTypes.swift; sourceTree = "<group>"; };
 		36A7A3FC2DF923BC00B52461 /* afm-chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "afm-chat.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptTool.swift; sourceTree = "<group>"; };
 		36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTool.swift; sourceTree = "<group>"; };
@@ -135,6 +141,7 @@
 			children = (
 				3658A61D2DF9E89C00254350 /* ChatBubble.swift */,
 				3658A61E2DF9E89C00254350 /* ChatContainerView.swift */,
+				36984D5D2E45DB6A00CDC79C /* LLM */,
 				3658A6952DFBA8A500254350 /* Tools */,
 				3658A65D2DF9EE1A00254350 /* ChatManager.swift */,
 				3658A61F2DF9E89C00254350 /* ChatModels.swift */,
@@ -154,6 +161,15 @@
 				3658A6942DFBA8A500254350 /* Weather.swift */,
 			);
 			path = Tools;
+			sourceTree = "<group>";
+		};
+		36984D5D2E45DB6A00CDC79C /* LLM */ = {
+			isa = PBXGroup;
+			children = (
+				36984D5B2E45DB6A00CDC79C /* AFMClient.swift */,
+				36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */,
+			);
+			path = LLM;
 			sourceTree = "<group>";
 		};
 		36A7A3F32DF923BC00B52461 = {
@@ -289,6 +305,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				36984D5E2E45DB6A00CDC79C /* AFMClient.swift in Sources */,
+				36984D5F2E45DB6A00CDC79C /* LLMTypes.swift in Sources */,
 				3658A6232DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				3658A6242DF9E89C00254350 /* ChatModels.swift in Sources */,
 				36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */,
@@ -307,6 +325,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				36984D602E45DB6A00CDC79C /* AFMClient.swift in Sources */,
+				36984D612E45DB6A00CDC79C /* LLMTypes.swift in Sources */,
 				3658A6282DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */,
 				36EC3F972E1359C0009B8F2F /* WebFetchTool.swift in Sources */,

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import FoundationModels
 
 // Error handling for FoundationModels
 enum ChatError: Identifiable, Codable {
@@ -76,32 +75,29 @@ enum ChatError: Identifiable, Codable {
         }
     }
     
-    static func fromFoundationModelsError(_ error: Error) -> ChatError {
-        // Check if it's a FoundationModels error
-        if let languageModelError = error as? LanguageModelSession.GenerationError {
-            switch languageModelError {
-            case .guardrailViolation(let message):
-                return .guardrailViolation(message.debugDescription)
-            case .exceededContextWindowSize(let message):
-                return .exceededContextWindowSize(message.debugDescription)
-            case .unsupportedGuide(let message):
-                return .unsupportedGuide(message.debugDescription)
-            case .decodingFailure(let message):
-                return .decodingFailure(message.debugDescription)
-            case .assetsUnavailable(let message):
-                return .assetsUnavailable(message.debugDescription)
-            @unknown default:
-                return .unknownError(error.localizedDescription)
-            }
-        } else {
-            // Check for tool-related errors
-            let errorDescription = error.localizedDescription
-            if errorDescription.contains("tool:") || errorDescription.contains("WeatherTool") {
-                return .unknownError("Tool execution failed: \(errorDescription)")
-            }
-            // Default to unknown error
-            return .unknownError(error.localizedDescription)
+    static func fromError(_ error: Error) -> ChatError {
+        // Generic mapping independent of provider
+        let errorDescription = error.localizedDescription
+        if errorDescription.localizedCaseInsensitiveContains("context") ||
+            errorDescription.localizedCaseInsensitiveContains("too long") {
+            return .exceededContextWindowSize(errorDescription)
         }
+        if errorDescription.localizedCaseInsensitiveContains("guardrail") ||
+            errorDescription.localizedCaseInsensitiveContains("policy") {
+            return .guardrailViolation(errorDescription)
+        }
+        if errorDescription.localizedCaseInsensitiveContains("decode") {
+            return .decodingFailure(errorDescription)
+        }
+        if errorDescription.localizedCaseInsensitiveContains("asset") ||
+            errorDescription.localizedCaseInsensitiveContains("model unavailable") {
+            return .assetsUnavailable(errorDescription)
+        }
+        // Tool-related errors
+        if errorDescription.contains("tool:") || errorDescription.contains("Tool ") || errorDescription.contains("WeatherTool") {
+            return .unknownError("Tool execution failed: \(errorDescription)")
+        }
+        return .unknownError(errorDescription)
     }
 }
 
@@ -223,8 +219,20 @@ struct Chat: Identifiable, Codable {
     var systemPrompt: String
     var temperature: Double
     var toolsEnabled: Bool
+    // Per-tool enablement (effective only when toolsEnabled == true)
+    var toolCodeInterpreterEnabled: Bool
+    var toolLocationEnabled: Bool
+    var toolWebFetchEnabled: Bool
+    var toolWebSearchEnabled: Bool
     
-    init(title: String = "New Chat", systemPrompt: String = "You are a helpful assistant.", temperature: Double = 1.0, toolsEnabled: Bool = true) {
+    init(title: String = "New Chat",
+         systemPrompt: String = "You are a helpful assistant.",
+         temperature: Double = 1.0,
+         toolsEnabled: Bool = true,
+         toolCodeInterpreterEnabled: Bool = true,
+         toolLocationEnabled: Bool = true,
+         toolWebFetchEnabled: Bool = true,
+         toolWebSearchEnabled: Bool = true) {
         self.id = UUID()
         self.title = title
         self.messages = []
@@ -232,11 +240,16 @@ struct Chat: Identifiable, Codable {
         self.systemPrompt = systemPrompt
         self.temperature = temperature
         self.toolsEnabled = toolsEnabled
+        self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
+        self.toolLocationEnabled = toolLocationEnabled
+        self.toolWebFetchEnabled = toolWebFetchEnabled
+        self.toolWebSearchEnabled = toolWebSearchEnabled
     }
     
     // Custom Codable implementation for backward compatibility
     private enum CodingKeys: String, CodingKey {
-        case id, title, messages, createdAt, systemPrompt, temperature, toolsEnabled
+        case id, title, messages, createdAt, systemPrompt, temperature, toolsEnabled,
+             toolCodeInterpreterEnabled, toolLocationEnabled, toolWebFetchEnabled, toolWebSearchEnabled
     }
     
     init(from decoder: Decoder) throws {
@@ -258,7 +271,11 @@ struct Chat: Identifiable, Codable {
         
         self.systemPrompt = try container.decode(String.self, forKey: .systemPrompt)
         self.temperature = try container.decode(Double.self, forKey: .temperature)
-        self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false // Default to true for old chats
+        self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false
+        self.toolCodeInterpreterEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolCodeInterpreterEnabled) ?? true
+        self.toolLocationEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolLocationEnabled) ?? true
+        self.toolWebFetchEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolWebFetchEnabled) ?? true
+        self.toolWebSearchEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolWebSearchEnabled) ?? true
     }
     
     func encode(to encoder: Encoder) throws {
@@ -270,6 +287,10 @@ struct Chat: Identifiable, Codable {
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(temperature, forKey: .temperature)
         try container.encode(toolsEnabled, forKey: .toolsEnabled)
+        try container.encode(toolCodeInterpreterEnabled, forKey: .toolCodeInterpreterEnabled)
+        try container.encode(toolLocationEnabled, forKey: .toolLocationEnabled)
+        try container.encode(toolWebFetchEnabled, forKey: .toolWebFetchEnabled)
+        try container.encode(toolWebSearchEnabled, forKey: .toolWebSearchEnabled)
     }
     
     // Generate a fallback title based on the first user message (used if AI generation fails)

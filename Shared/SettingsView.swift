@@ -11,10 +11,21 @@ struct SettingsView: View {
     @Binding var systemPrompt: String
     @Binding var temperature: Double
     @Binding var toolsEnabled: Bool
+    // Per-tool bindings (parent)
+    @Binding var toolCodeInterpreterEnabled: Bool
+    @Binding var toolLocationEnabled: Bool
+    @Binding var toolWebFetchEnabled: Bool
+    @Binding var toolWebSearchEnabled: Bool
+    let canEditToolsAndPrompt: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var tempPrompt: String = ""
     @State private var tempTemperature: Double = 1.0
     @State private var tempToolsEnabled: Bool = true
+    // Temp per-tool states used within the sheet until Save
+    @State private var tempToolCodeInterpreterEnabled: Bool = true
+    @State private var tempToolLocationEnabled: Bool = true
+    @State private var tempToolWebFetchEnabled: Bool = true
+    @State private var tempToolWebSearchEnabled: Bool = true
     let onSave: () -> Void
     
     private let defaultPrompt = "You are a helpful assistant."
@@ -33,11 +44,15 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
+                        .disabled(!canEditToolsAndPrompt)
+                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
                     
                     Button("Reset to Default") {
                         tempPrompt = defaultPrompt
                     }
                     .foregroundColor(.blue)
+                    .disabled(!canEditToolsAndPrompt)
+                    .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
                 }
                 
                 Section(header: Text("Temperature")) {
@@ -75,30 +90,50 @@ struct SettingsView: View {
                     
                     Toggle("Enable Tools (Experimental)", isOn: $tempToolsEnabled)
                         .toggleStyle(SwitchToggleStyle())
+                        .padding(.vertical, 6)
+                        .disabled(!canEditToolsAndPrompt)
+                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
                     
                     if tempToolsEnabled {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Available Tools:")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.secondary)
-                            
+                        Toggle(isOn: $tempToolCodeInterpreterEnabled) {
                             HStack {
-                                Image(systemName: "gear")
-                                    .foregroundColor(.blue)
+                                Image(systemName: "gear").foregroundColor(.blue)
                                 Text("Code Interpreter")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            HStack {
-                                Image(systemName: "location")
-                                    .foregroundColor(.green)
-                                Text("Location")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
                             }
                         }
-                        .padding(.top, 4)
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        .disabled(!canEditToolsAndPrompt)
+                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+
+                        Toggle(isOn: $tempToolLocationEnabled) {
+                            HStack {
+                                Image(systemName: "location").foregroundColor(.green)
+                                Text("Location")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        .disabled(!canEditToolsAndPrompt)
+                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+
+                        Toggle(isOn: $tempToolWebFetchEnabled) {
+                            HStack {
+                                Image(systemName: "safari").foregroundColor(.purple)
+                                Text("Web Fetch")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        .disabled(!canEditToolsAndPrompt)
+                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+
+                        Toggle(isOn: $tempToolWebSearchEnabled) {
+                            HStack {
+                                Image(systemName: "magnifyingglass").foregroundColor(.orange)
+                                Text("Web Search")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        .disabled(!canEditToolsAndPrompt)
+                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
                     }
                 }
             }
@@ -116,6 +151,10 @@ struct SettingsView: View {
                         systemPrompt = tempPrompt
                         temperature = tempTemperature
                         toolsEnabled = tempToolsEnabled
+                        toolCodeInterpreterEnabled = tempToolCodeInterpreterEnabled
+                        toolLocationEnabled = tempToolLocationEnabled
+                        toolWebFetchEnabled = tempToolWebFetchEnabled
+                        toolWebSearchEnabled = tempToolWebSearchEnabled
                         onSave()
                         dismiss()
                     }
@@ -127,6 +166,10 @@ struct SettingsView: View {
             tempPrompt = systemPrompt
             tempTemperature = temperature
             tempToolsEnabled = toolsEnabled
+            tempToolCodeInterpreterEnabled = toolCodeInterpreterEnabled
+            tempToolLocationEnabled = toolLocationEnabled
+            tempToolWebFetchEnabled = toolWebFetchEnabled
+            tempToolWebSearchEnabled = toolWebSearchEnabled
         }
     }
 }

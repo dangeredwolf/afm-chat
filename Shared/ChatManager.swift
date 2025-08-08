@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import FoundationModels
 internal import Combine
 
 class ChatManager: ObservableObject {
@@ -30,11 +29,12 @@ class ChatManager: ObservableObject {
     @Published var temporaryChat: Chat? = nil
     
     // Store sessions per chat to maintain context
-    private var sessions: [UUID: LanguageModelSession] = [:]
+    private var sessions: [UUID: LLMSession] = [:]
     
     // Separate session for generating titles (not tied to any specific chat)
-    private lazy var titleGenerationSession: LanguageModelSession = {
-        return LanguageModelSession(instructions: """
+    private lazy var titleGenerationSession: LLMSession = {
+        return LLMProviderManager.shared.client.createSession(
+            instructions: """
             You are a helpful assistant that creates concise, descriptive titles for conversations.
             
             Your task is to generate a short, clear title (3-6 words) that captures the main topic or intent of the user's message.
@@ -57,15 +57,18 @@ class ChatManager: ObservableObject {
             - "Hello" - "User Greetings"
             
             Respond with only the title in the same language as the original message, no additional text or punctuation.
-            """)
+            """,
+            tools: []
+        )
     }()
     
     // Current session for the active chat
-    private var currentSession: LanguageModelSession {
+    private var currentSession: LLMSession {
         guard let chatId = currentChatId else {
             // Fallback session if no chat is selected
-            return LanguageModelSession(
-                 instructions: "You are a helpful assistant."
+            return LLMProviderManager.shared.client.createSession(
+                instructions: "You are a helpful assistant.",
+                tools: []
             )
         }
         
@@ -82,7 +85,7 @@ class ChatManager: ObservableObject {
 
     
     // Create a new session for a specific chat with transcript rehydration
-    private func createSessionForChat(chatId: UUID, upToMessage: UUID? = nil) -> LanguageModelSession {
+    private func createSessionForChat(chatId: UUID, upToMessage: UUID? = nil) -> LLMSession {
         // Get system prompt and tools setting for this chat
         let chat = getChatById(chatId)
         let systemPrompt = chat?.systemPrompt ?? "You are a helpful assistant."
@@ -105,23 +108,29 @@ class ChatManager: ObservableObject {
         // Create transcript from existing messages
         // let transcript = createTranscriptFromMessages(messagesToInclude)
         
-        // Create session with conditional tools based on chat settings
-        let tools: [any Tool] = toolsEnabled ? [
-//                SafeWeatherTool(),
-                JavaScriptTool(),
-                LocationTool(),
-                WebFetchTool(),
-                SearchTool()
-            ] : []
+        // Create session with conditional tools based on chat settings and per-tool flags
+        var toolList: [LLMTool] = []
+        if toolsEnabled {
+            if chat?.toolCodeInterpreterEnabled ?? true {
+                toolList.append(AnyLLMTool(name: "Code Interpreter", description: "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc.", providerPayloads: ["afmTool": JavaScriptTool()]))
+            }
+            if chat?.toolLocationEnabled ?? true {
+                toolList.append(AnyLLMTool(name: "Location", description: "Get the user's current location, coarse or precise. The user will be able to accept or deny your request, so you do not need to ask for permission.", providerPayloads: ["afmTool": LocationTool()]))
+            }
+            if chat?.toolWebFetchEnabled ?? true {
+                toolList.append(AnyLLMTool(name: "Web Fetch", description: "Fetch and extract content from web pages", providerPayloads: ["afmTool": WebFetchTool()]))
+            }
+            if chat?.toolWebSearchEnabled ?? true {
+                toolList.append(AnyLLMTool(name: "Web Search", description: "Search the web for information on any topic to retrieve up-to-date information.", providerPayloads: ["afmTool": SearchTool()]))
+            }
+        }
         
-        print("Creating session with \(tools.count) tools, toolsEnabled: \(toolsEnabled)")
+//        print("Creating session with \(tools.count) tools, toolsEnabled: \(toolsEnabled)")
         
-        // Create session with transcript rehydration
-        // Note: When using transcript, instructions should be included in the transcript itself
-        return LanguageModelSession(
-            tools: tools,
-            // transcript: transcript,
-            instructions: systemPrompt
+        // Create session with transcript rehydration (transcript disabled for now)
+        return LLMProviderManager.shared.client.createSession(
+            instructions: systemPrompt,
+            tools: toolList
         )
     }
     
@@ -220,8 +229,18 @@ class ChatManager: ObservableObject {
         let defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
         let defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
         let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
-        
-        let newChat = Chat(systemPrompt: defaultPrompt, temperature: defaultTemperature, toolsEnabled: defaultToolsEnabled)
+        let codeEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
+        let locationEnabled = UserDefaults.standard.object(forKey: "toolLocationEnabled") as? Bool ?? true
+        let webFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
+        let webSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
+
+        let newChat = Chat(systemPrompt: defaultPrompt,
+                           temperature: defaultTemperature,
+                           toolsEnabled: defaultToolsEnabled,
+                           toolCodeInterpreterEnabled: codeEnabled,
+                           toolLocationEnabled: locationEnabled,
+                           toolWebFetchEnabled: webFetchEnabled,
+                           toolWebSearchEnabled: webSearchEnabled)
         
         // Store as temporary chat (not saved until first message)
         temporaryChat = newChat
@@ -262,11 +281,17 @@ class ChatManager: ObservableObject {
         saveChats()
     }
     
-    func updateChatSettings(systemPrompt: String, temperature: Double, toolsEnabled: Bool) {
+    func updateChatSettings(systemPrompt: String, temperature: Double, toolsEnabled: Bool, perTools: (code: Bool, location: Bool, webFetch: Bool, webSearch: Bool)? = nil) {
         guard var chat = currentChat else { return }
         chat.systemPrompt = systemPrompt
         chat.temperature = temperature
         chat.toolsEnabled = toolsEnabled
+        if let perTools = perTools {
+            chat.toolCodeInterpreterEnabled = perTools.code
+            chat.toolLocationEnabled = perTools.location
+            chat.toolWebFetchEnabled = perTools.webFetch
+            chat.toolWebSearchEnabled = perTools.webSearch
+        }
         currentChat = chat
         
         // Recreate session with new settings and current transcript
@@ -276,6 +301,12 @@ class ChatManager: ObservableObject {
         UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
         UserDefaults.standard.set(temperature, forKey: "temperature")
         UserDefaults.standard.set(toolsEnabled, forKey: "toolsEnabled")
+        if let perTools = perTools {
+            UserDefaults.standard.set(perTools.code, forKey: "toolCodeInterpreterEnabled")
+            UserDefaults.standard.set(perTools.location, forKey: "toolLocationEnabled")
+            UserDefaults.standard.set(perTools.webFetch, forKey: "toolWebFetchEnabled")
+            UserDefaults.standard.set(perTools.webSearch, forKey: "toolWebSearchEnabled")
+        }
     }
     
     func sendMessage() {
@@ -548,11 +579,11 @@ class ChatManager: ObservableObject {
         Task {
             do {
                 let prompt = "Generate a title for a conversation whose first message is: \"\(userMessage)\""
-                let response = try await titleGenerationSession.respond(to: prompt)
+                let responseText = try await titleGenerationSession.respond(to: prompt, temperature: 0.7)
                 
                 await MainActor.run {
                     // Find and update the chat with the AI-generated title
-                    let aiTitle = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let aiTitle = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
                     
                     // Validate the AI title (ensure it's not too long and not empty)
                     if !aiTitle.isEmpty && aiTitle.count <= 50 {
@@ -575,7 +606,7 @@ class ChatManager: ObservableObject {
                 }
             } catch {
                 // Log the specific error type for better debugging
-                let chatError = ChatError.fromFoundationModelsError(error)
+                let chatError = ChatError.fromError(error)
                 print("Failed to generate AI title: \(chatError.title) - \(chatError.description)")
                 // Fallback title is already set, so we don't need to do anything
             }
@@ -588,69 +619,52 @@ class ChatManager: ObservableObject {
         var hasSeenToolCalls = false
         
         do {
-            let generationOptions = GenerationOptions(temperature: chat.temperature)
-            let responseStream = currentSession.streamResponse(to: userMessage, options: generationOptions)
-            
-            var currentResponse = ""
-            var responseCount = 0
-            var maxContentLength = 0
-            var longestResponse = ""
-            
-            for try await response in responseStream {
-                responseCount += 1
-                print("Response chunk \(responseCount): \(response.content.prefix(50))...")
+            let responseStream = currentSession.streamResponse(to: userMessage, temperature: chat.temperature)
+            var latestText = ""
+            for try await event in responseStream {
                 await MainActor.run {
-                    currentResponse = response.content
-                    
-                    // Track the longest response we've seen to preserve content
-                    if response.content.count > maxContentLength {
-                        maxContentLength = response.content.count
-                        longestResponse = response.content
-                        print("New longest response: \(response.content.count) chars")
-                    }
-                    
-                    // Try to extract tool call information and full content from the session's transcript
-                    // But don't let this block the response if it fails
-                    var transcriptContent = ""
-                    do {
-                        let (extractedToolCalls, extractedContent) = self.extractToolCallsFromTranscript()
-                        print("Extracted \(extractedToolCalls.count) tool calls")
-                        transcriptContent = extractedContent
-                        
-                        // Keep track of tool calls - once we see them, keep showing them
-                        if !extractedToolCalls.isEmpty {
-                            hasSeenToolCalls = true
-                            lastToolCalls = extractedToolCalls
-                            print("Updated lastToolCalls with \(lastToolCalls.count) calls")
+                    switch event {
+                    case .contentUpdated(let fullText):
+                        latestText = fullText
+                        if var currentChat = self.currentChat {
+                            if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
+                                currentChat.messages[lastIndex] = ChatMessage(
+                                    content: latestText,
+                                    isUser: false,
+                                    toolCalls: hasSeenToolCalls ? lastToolCalls : []
+                                )
+                                self.currentChat = currentChat
+                            }
                         }
-                    } catch {
-                        print("Tool extraction failed: \(error)")
-                        // Continue without tool calls if extraction fails
-                    }
-                    
-                    // Use the tool calls we've seen (even if current extraction failed)
-                    let toolCallsToShow = hasSeenToolCalls ? lastToolCalls : []
-                    print("Showing \(toolCallsToShow.count) tool calls in UI")
-                    
-                    // Update the current chat's last message
-                    // Use transcript content if available and longer, otherwise use response stream content
-                    let finalContent: String
-                    if !transcriptContent.isEmpty && transcriptContent.count >= currentResponse.count {
-                        finalContent = transcriptContent
-                        print("Using transcript content (\(transcriptContent.count) chars)")
-                    } else {
-                        finalContent = longestResponse.count > currentResponse.count ? longestResponse : currentResponse
-                        print("Using response stream content (\(finalContent.count) chars)")
-                    }
-                    
-                    if var currentChat = self.currentChat {
-                        if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                            currentChat.messages[lastIndex] = ChatMessage(
-                                content: finalContent,
-                                isUser: false,
-                                toolCalls: toolCallsToShow
+                    case .toolCallsUpdated(let calls):
+                        hasSeenToolCalls = true
+                        // Map LLMToolCallEvent to ToolCallInfo for UI persistence
+                        lastToolCalls = calls.map { call in
+                            var status: ToolCallStatus
+                            switch call.status {
+                            case .pending: status = .pending
+                            case .executing: status = .executing
+                            case .completed: status = .completed
+                            case .failed: status = .failed
+                            }
+                            return ToolCallInfo(
+                                toolName: call.toolName,
+                                toolDescription: self.getToolDescription(for: call.toolName),
+                                arguments: call.arguments,
+                                status: status,
+                                result: call.result,
+                                error: call.error
                             )
-                            self.currentChat = currentChat
+                        }
+                        if var currentChat = self.currentChat {
+                            if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
+                                currentChat.messages[lastIndex] = ChatMessage(
+                                    content: latestText,
+                                    isUser: false,
+                                    toolCalls: lastToolCalls
+                                )
+                                self.currentChat = currentChat
+                            }
                         }
                     }
                 }
@@ -662,7 +676,7 @@ class ChatManager: ObservableObject {
             }
         } catch {
             await MainActor.run {
-                let chatError = ChatError.fromFoundationModelsError(error)
+                let chatError = ChatError.fromError(error)
                 
                 if var currentChat = self.currentChat {
                     if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
@@ -688,95 +702,6 @@ class ChatManager: ObservableObject {
         }
     }
     
-    // Extract tool call information and reconstruct full content from transcript
-    private func extractToolCallsFromTranscript() -> ([ToolCallInfo], String) {
-        var toolCalls: [ToolCallInfo] = []
-        var toolOutputs: [String] = [] // Array of outputs in order
-        var fullContent = ""
-        
-        // Access the transcript from the current session
-        let transcript = currentSession.transcript
-        let entries = Array(transcript)
-        
-        print("Transcript has \(entries.count) entries")
-        
-        // Find the most recent user prompt index
-        var lastPromptIndex = -1
-        for (index, entry) in entries.enumerated().reversed() {
-            if case .prompt(_) = entry {
-                lastPromptIndex = index
-                break
-            }
-        }
-        
-        print("Last prompt index: \(lastPromptIndex)")
-        
-        // Collect tool calls, outputs, and responses that occurred after the last prompt
-        if lastPromptIndex >= 0 && lastPromptIndex < entries.count - 1 {
-            let relevantEntries = Array(entries[(lastPromptIndex + 1)...])
-            print("Processing \(relevantEntries.count) relevant entries")
-            
-            // First pass: collect tool calls and build full content
-            for (index, entry) in relevantEntries.enumerated() {
-                print("Entry \(index): \(entry)")
-                
-                switch entry {
-                case .response(let response):
-                    // Add response content to full content
-                    let responseText = response.segments.compactMap { segment in
-                        switch segment {
-                        case .text(let textSegment):
-                            return textSegment.content
-                        default:
-                            return nil
-                        }
-                    }.joined(separator: "")
-                    
-                    if !responseText.isEmpty {
-                        if !fullContent.isEmpty {
-                            fullContent += "\n\n"
-                        }
-                        fullContent += responseText
-                        print("Added response content: \(responseText.prefix(50))...")
-                    }
-                    
-                case .toolCalls(let calls):
-                    print("Found \(calls.count) tool calls")
-                    for call in calls {
-                        let toolCall = ToolCallInfo(
-                            toolName: call.toolName,
-                            toolDescription: getToolDescription(for: call.toolName),
-                            arguments: String(describing: call.arguments),
-                            status: .executing
-                        )
-                        toolCalls.append(toolCall)
-                        print("Added tool call: \(call.toolName)")
-                    }
-                    
-                case .toolOutput(let output):
-                    let outputContent = extractToolOutputContent(from: output)
-                    toolOutputs.append(outputContent)
-                    print("Found tool output for: \(output.toolName) (output #\(toolOutputs.count))")
-                    
-                default:
-                    print("Entry \(index) is other type")
-                }
-            }
-            
-            // Second pass: update tool call statuses by matching order
-            for i in toolCalls.indices {
-                if i < toolOutputs.count {
-                    toolCalls[i].status = .completed
-                    toolCalls[i].result = toolOutputs[i]
-                    print("Marked tool call \(i) (\(toolCalls[i].toolName)) as completed with result: \(toolOutputs[i].prefix(20))...")
-                }
-            }
-        }
-        
-        print("Returning \(toolCalls.count) tool calls and content: \(fullContent.prefix(100))...")
-        return (toolCalls, fullContent)
-    }
-    
     // Get tool description for a given tool name
     private func getToolDescription(for toolName: String) -> String {
         switch toolName {
@@ -795,23 +720,5 @@ class ChatManager: ObservableObject {
         }
     }
     
-    // Extract content from tool output
-    private func extractToolOutputContent(from output: Transcript.ToolOutput) -> String {
-        // Convert segments to readable text
-        let content = output.segments.compactMap { segment in
-            switch segment {
-            case .text(let textSegment):
-                return textSegment.content
-            case .structure(let structuredSegment):
-                return String(describing: structuredSegment.content)
-            @unknown default:
-                return nil
-            }
-        }.joined(separator: "\n")
-        
-        return content.isEmpty ? "Tool executed successfully" : content
-    }
-
     
-
 } 

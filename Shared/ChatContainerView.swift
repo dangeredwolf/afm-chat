@@ -6,18 +6,17 @@
 //
 
 import SwiftUI
-import FoundationModels
 
 struct ChatContainerView: View {
     @StateObject private var chatManager = ChatManager()
     @State private var selectedChatId: UUID?
     @State private var showingModelUnavailableAlert = false
     
-    private var model = SystemLanguageModel.default
+    private var availability: LLMAvailability { LLMProviderManager.shared.client.availability }
     
     var body: some View {
         NavigationStack {
-            switch model.availability {
+            switch availability {
             case .available:
                 ChatListView(chatManager: chatManager, selectedChatId: $selectedChatId)
             case .unavailable(.deviceNotEligible):
@@ -26,7 +25,7 @@ struct ChatContainerView: View {
                     message: "Your device doesn't support Apple Intelligence features. Apple Intelligence requires an A17 Pro, A18, or M1 chip or better.",
                     icon: "exclamationmark.triangle"
                 )
-            case .unavailable(.appleIntelligenceNotEnabled):
+            case .unavailable(.notEnabled):
                 ModelUnavailableView(
                     title: "Apple Intelligence Required",
                     message: "You need to enable Apple Intelligence in Settings. It might take a few minutes for your device to download the language model.",
@@ -202,7 +201,13 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: newPrompt,
                                 temperature: chatManager.currentTemperature,
-                                toolsEnabled: chatManager.currentToolsEnabled
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                )
                             )
                         }
                     ),
@@ -212,7 +217,13 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: chatManager.currentSystemPrompt,
                                 temperature: newTemperature,
-                                toolsEnabled: chatManager.currentToolsEnabled
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                )
                             )
                         }
                     ),
@@ -222,10 +233,81 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: chatManager.currentSystemPrompt,
                                 temperature: chatManager.currentTemperature,
-                                toolsEnabled: newToolsEnabled
+                                toolsEnabled: newToolsEnabled,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                )
                             )
                         }
                     ),
+                    toolCodeInterpreterEnabled: Binding(
+                        get: { chatManager.currentChat?.toolCodeInterpreterEnabled ?? true },
+                        set: { newValue in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                perTools: (
+                                    code: newValue,
+                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                )
+                            )
+                        }
+                    ),
+                    toolLocationEnabled: Binding(
+                        get: { chatManager.currentChat?.toolLocationEnabled ?? true },
+                        set: { newValue in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    location: newValue,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                )
+                            )
+                        }
+                    ),
+                    toolWebFetchEnabled: Binding(
+                        get: { chatManager.currentChat?.toolWebFetchEnabled ?? true },
+                        set: { newValue in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
+                                    webFetch: newValue,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                )
+                            )
+                        }
+                    ),
+                    toolWebSearchEnabled: Binding(
+                        get: { chatManager.currentChat?.toolWebSearchEnabled ?? true },
+                        set: { newValue in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webSearch: newValue
+                                )
+                            )
+                        }
+                    ),
+                    canEditToolsAndPrompt: chatManager.currentMessages.isEmpty,
                     onSave: { }
                 )
             }
@@ -253,6 +335,10 @@ struct GlobalSettingsView: View {
     @State private var defaultPrompt: String = ""
     @State private var defaultTemperature: Double = 1.0
     @State private var defaultToolsEnabled: Bool = true
+    @State private var defaultToolCodeInterpreterEnabled: Bool = true
+    @State private var defaultToolLocationEnabled: Bool = true
+    @State private var defaultToolWebFetchEnabled: Bool = true
+    @State private var defaultToolWebSearchEnabled: Bool = true
     
     var body: some View {
         NavigationView {
@@ -289,29 +375,34 @@ struct GlobalSettingsView: View {
                         .toggleStyle(SwitchToggleStyle())
                     
                     if defaultToolsEnabled {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Available Tools:")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.secondary)
-                            
+                        Toggle(isOn: $defaultToolCodeInterpreterEnabled) {
                             HStack {
-                                Image(systemName: "gear")
-                                    .foregroundColor(.blue)
+                                Image(systemName: "gear").foregroundColor(.blue)
                                 Text("Code Interpreter")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            HStack {
-                                Image(systemName: "location")
-                                    .foregroundColor(.green)
-                                Text("Location")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
                             }
                         }
-                        .padding(.top, 4)
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        Toggle(isOn: $defaultToolLocationEnabled) {
+                            HStack {
+                                Image(systemName: "location").foregroundColor(.green)
+                                Text("Location")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        Toggle(isOn: $defaultToolWebFetchEnabled) {
+                            HStack {
+                                Image(systemName: "safari").foregroundColor(.purple)
+                                Text("Web Fetch")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        Toggle(isOn: $defaultToolWebSearchEnabled) {
+                            HStack {
+                                Image(systemName: "magnifyingglass").foregroundColor(.orange)
+                                Text("Web Search")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                     }
                 }
             }
@@ -329,6 +420,10 @@ struct GlobalSettingsView: View {
                         UserDefaults.standard.set(defaultPrompt, forKey: "systemPrompt")
                         UserDefaults.standard.set(defaultTemperature, forKey: "temperature")
                         UserDefaults.standard.set(defaultToolsEnabled, forKey: "toolsEnabled")
+                        UserDefaults.standard.set(defaultToolCodeInterpreterEnabled, forKey: "toolCodeInterpreterEnabled")
+                        UserDefaults.standard.set(defaultToolLocationEnabled, forKey: "toolLocationEnabled")
+                        UserDefaults.standard.set(defaultToolWebFetchEnabled, forKey: "toolWebFetchEnabled")
+                        UserDefaults.standard.set(defaultToolWebSearchEnabled, forKey: "toolWebSearchEnabled")
                         dismiss()
                     }
                 }
@@ -338,6 +433,10 @@ struct GlobalSettingsView: View {
             defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
             defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
             defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
+            defaultToolCodeInterpreterEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
+            defaultToolLocationEnabled = UserDefaults.standard.object(forKey: "toolLocationEnabled") as? Bool ?? true
+            defaultToolWebFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
+            defaultToolWebSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
         }
     }
 }
