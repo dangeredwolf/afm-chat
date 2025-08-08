@@ -13,5 +13,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>PreciseLocationRequested</key>
+		<string>Allow the language model to optionally use your precise location to assist with location-based information.</string>
+	</dict>
 </dict>
 </plist>

@@ -22,7 +22,7 @@ struct WeatherTool: Tool {
       var windSpeed: Double
   }
 
-  func call(arguments: Arguments) async throws -> ToolOutput {
+  func call(arguments: Arguments) async throws -> [String] {
       do {
           // Create a geocoder to convert city name to coordinates
           let geocoder = CLGeocoder()
@@ -48,7 +48,7 @@ struct WeatherTool: Tool {
               Wind Speed: \(String(format: "%.1f", currentWeather.wind.speed.value)) \(currentWeather.wind.speed.unit.symbol)
               """
           
-          return ToolOutput(forecast)
+          return [forecast]
       } catch {
           // Provide more specific error handling
           if error.localizedDescription.contains("WDSJWTAuthenticator") {
@@ -81,7 +81,7 @@ struct SafeWeatherTool: Tool {
         var city: String
     }
     
-    func call(arguments: Arguments) async throws -> ToolOutput {
+    func call(arguments: Arguments) async throws -> [String] {
         do {
             // Try to call the weather tool with the same arguments
             let weatherArgs = WeatherTool.Arguments(city: arguments.city)
@@ -100,7 +100,7 @@ struct SafeWeatherTool: Tool {
             You can try checking the weather using other apps or websites in the meantime.
             """
             
-            return ToolOutput(errorMessage)
+            return [errorMessage]
         }
     }
 }

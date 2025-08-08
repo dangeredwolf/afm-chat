@@ -5,11 +5,11 @@ import ObjectiveC
 
 /// Location manager delegate for handling permission requests and location updates
 private class LocationPermissionDelegate: NSObject, CLLocationManagerDelegate {
-    let completion: (Result<ToolOutput, Error>) -> Void
+    let completion: (Result<[String], Error>) -> Void
     let requestPreciseLocation: Bool
     private var hasCompleted = false
     
-    init(requestPreciseLocation: Bool, completion: @escaping (Result<ToolOutput, Error>) -> Void) {
+    init(requestPreciseLocation: Bool, completion: @escaping (Result<[String], Error>) -> Void) {
         self.requestPreciseLocation = requestPreciseLocation
         self.completion = completion
         super.init()
@@ -21,8 +21,20 @@ private class LocationPermissionDelegate: NSObject, CLLocationManagerDelegate {
         
         switch manager.authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
-            // Permission granted, now request location
-            manager.requestLocation()
+            // Permission granted - if we need precise location, request it immediately
+            if requestPreciseLocation {
+                // Request temporary full accuracy before getting location
+                manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocationRequested") { [weak self] error in
+                    guard let self = self, !self.hasCompleted else { return }
+                    
+                    // Regardless of whether user granted precise location or not, request location
+                    // The delegate will handle checking accuracy in didUpdateLocations
+                    manager.requestLocation()
+                }
+            } else {
+                // Just need coarse location
+                manager.requestLocation()
+            }
         case .denied, .restricted:
             hasCompleted = true
             completion(.failure(NSError(
@@ -64,10 +76,31 @@ private class LocationPermissionDelegate: NSObject, CLLocationManagerDelegate {
             return
         }
         
+        // Check if we requested precise location but got coarse location
+        if requestPreciseLocation && location.horizontalAccuracy > 100 {
+            // Request temporary full accuracy authorization
+            manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocationRequested") { [weak self] error in
+                guard let self = self, !self.hasCompleted else { return }
+                
+                if let error = error {
+                    self.hasCompleted = true
+                    self.completion(.failure(NSError(
+                        domain: "LocationTool",
+                        code: 7,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to request precise location: \(error.localizedDescription)"]
+                    )))
+                } else {
+                    // Request location again with precise accuracy
+                    manager.requestLocation()
+                }
+            }
+            return
+        }
+        
         hasCompleted = true
         Task {
             let output = await formatLocationOutput(location: location, requestPreciseLocation: requestPreciseLocation)
-            completion(.success(ToolOutput(output)))
+            completion(.success([output]))
         }
     }
     
@@ -104,7 +137,7 @@ private class LocationPermissionDelegate: NSObject, CLLocationManagerDelegate {
     }
     
     private func formatLocationOutput(location: CLLocation, requestPreciseLocation: Bool) async -> String {
-        let accuracyLevel = location.horizontalAccuracy > 1000 ? " (coarse location for privacy)" : ""
+        let accuracyLevel = location.horizontalAccuracy > 1000 ? " (coarse)" : ""
         var output = """
         Current Location:
         Latitude: \(location.coordinate.latitude)
@@ -116,52 +149,53 @@ private class LocationPermissionDelegate: NSObject, CLLocationManagerDelegate {
             output += "\nAltitude: \(String(format: "%.0f", location.altitude))m"
         }
         
-        if requestPreciseLocation {
-            // Add timestamp
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .medium
-            output += "\nTimestamp: \(formatter.string(from: location.timestamp))"
+        // Always try to get basic location information
+        do {
+            let geocoder = CLGeocoder()
+            let placemarks = try await geocoder.reverseGeocodeLocation(location)
             
-            // Try to get address information
-            do {
-                let geocoder = CLGeocoder()
-                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+            if let placemark = placemarks.first {
+                output += "\n\nLocation Details:"
                 
-                if let placemark = placemarks.first {
-                    output += "\n\nAddress Details:"
+                if let city = placemark.locality {
+                    output += "\nCity: \(city)"
+                }
+                
+                if let state = placemark.administrativeArea {
+                    output += "\nState/Province: \(state)"
+                }
+                
+                if let country = placemark.country {
+                    output += "\nCountry: \(country)"
+                }
+                
+                if let timeZone = placemark.timeZone {
+                    output += "\nTime Zone: \(timeZone.identifier)"
+                }
+                
+                // Add detailed information only for precise location
+                if requestPreciseLocation {
+                    // Add timestamp
+                    let formatter = DateFormatter()
+                    formatter.dateStyle = .medium
+                    formatter.timeStyle = .medium
+                    output += "\nTimestamp: \(formatter.string(from: location.timestamp))"
                     
                     if let name = placemark.name {
-                        output += "\nLocation: \(name)"
+                        output += "\nSpecific Location: \(name)"
                     }
                     
                     if let street = placemark.thoroughfare {
                         output += "\nStreet: \(street)"
                     }
                     
-                    if let city = placemark.locality {
-                        output += "\nCity: \(city)"
-                    }
-                    
-                    if let state = placemark.administrativeArea {
-                        output += "\nState/Province: \(state)"
-                    }
-                    
-                    if let country = placemark.country {
-                        output += "\nCountry: \(country)"
-                    }
-                    
                     if let postalCode = placemark.postalCode {
                         output += "\nPostal Code: \(postalCode)"
                     }
-                    
-                    if let timeZone = placemark.timeZone {
-                        output += "\nTime Zone: \(timeZone.identifier)"
-                    }
                 }
-            } catch {
-                output += "\n\nNote: Could not retrieve address details: \(error.localizedDescription)"
             }
+        } catch {
+            output += "\n\nNote: Could not retrieve location details: \(error.localizedDescription)"
         }
         
         return output
@@ -170,17 +204,20 @@ private class LocationPermissionDelegate: NSObject, CLLocationManagerDelegate {
 
 /// Location manager delegate for handling location updates when permission is already granted
 private class LocationDelegate: NSObject, CLLocationManagerDelegate {
-    let completion: (Result<ToolOutput, Error>) -> Void
+    let completion: (Result<[String], Error>) -> Void
     let requestPreciseLocation: Bool
+    private var hasCompleted = false
     
-    init(requestPreciseLocation: Bool, completion: @escaping (Result<ToolOutput, Error>) -> Void) {
+    init(requestPreciseLocation: Bool, completion: @escaping (Result<[String], Error>) -> Void) {
         self.requestPreciseLocation = requestPreciseLocation
         self.completion = completion
         super.init()
     }
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard !hasCompleted else { return }
         guard let location = locations.last else {
+            hasCompleted = true
             completion(.failure(NSError(
                 domain: "LocationTool",
                 code: 4,
@@ -189,13 +226,38 @@ private class LocationDelegate: NSObject, CLLocationManagerDelegate {
             return
         }
         
+        // Check if we requested precise location but got coarse location
+        if requestPreciseLocation && location.horizontalAccuracy > 100 {
+            // Request temporary full accuracy authorization
+            manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocationRequested") { [weak self] error in
+                guard let self = self, !self.hasCompleted else { return }
+                
+                if let error = error {
+                    self.hasCompleted = true
+                    self.completion(.failure(NSError(
+                        domain: "LocationTool",
+                        code: 7,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to request precise location: \(error.localizedDescription)"]
+                    )))
+                } else {
+                    // Request location again with precise accuracy
+                    manager.requestLocation()
+                }
+            }
+            return
+        }
+        
+        hasCompleted = true
         Task {
             let output = await formatLocationOutput(location: location, requestPreciseLocation: requestPreciseLocation)
-            completion(.success(ToolOutput(output)))
+            completion(.success([output]))
         }
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard !hasCompleted else { return }
+        hasCompleted = true
+        
         let errorMessage: String
         
         if let clError = error as? CLError {
@@ -225,7 +287,7 @@ private class LocationDelegate: NSObject, CLLocationManagerDelegate {
     }
     
     private func formatLocationOutput(location: CLLocation, requestPreciseLocation: Bool) async -> String {
-        let accuracyLevel = location.horizontalAccuracy > 1000 ? " (coarse location for privacy)" : ""
+        let accuracyLevel = location.horizontalAccuracy > 1000 ? " (coarse)" : ""
         var output = """
         Current Location:
         Latitude: \(location.coordinate.latitude)
@@ -237,52 +299,53 @@ private class LocationDelegate: NSObject, CLLocationManagerDelegate {
             output += "\nAltitude: \(String(format: "%.0f", location.altitude))m"
         }
         
-        if requestPreciseLocation {
-            // Add timestamp
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .medium
-            output += "\nTimestamp: \(formatter.string(from: location.timestamp))"
+        // Always try to get basic location information
+        do {
+            let geocoder = CLGeocoder()
+            let placemarks = try await geocoder.reverseGeocodeLocation(location)
             
-            // Try to get address information
-            do {
-                let geocoder = CLGeocoder()
-                let placemarks = try await geocoder.reverseGeocodeLocation(location)
+            if let placemark = placemarks.first {
+                output += "\n\nLocation Details:"
                 
-                if let placemark = placemarks.first {
-                    output += "\n\nAddress Details:"
+                if let city = placemark.locality {
+                    output += "\nCity: \(city)"
+                }
+                
+                if let state = placemark.administrativeArea {
+                    output += "\nState/Province: \(state)"
+                }
+                
+                if let country = placemark.country {
+                    output += "\nCountry: \(country)"
+                }
+                
+                if let timeZone = placemark.timeZone {
+                    output += "\nTime Zone: \(timeZone.identifier)"
+                }
+                
+                // Add detailed information only for precise location
+                if requestPreciseLocation {
+                    // Add timestamp
+                    let formatter = DateFormatter()
+                    formatter.dateStyle = .medium
+                    formatter.timeStyle = .medium
+                    output += "\nTimestamp: \(formatter.string(from: location.timestamp))"
                     
                     if let name = placemark.name {
-                        output += "\nLocation: \(name)"
+                        output += "\nSpecific Location: \(name)"
                     }
                     
                     if let street = placemark.thoroughfare {
                         output += "\nStreet: \(street)"
                     }
                     
-                    if let city = placemark.locality {
-                        output += "\nCity: \(city)"
-                    }
-                    
-                    if let state = placemark.administrativeArea {
-                        output += "\nState/Province: \(state)"
-                    }
-                    
-                    if let country = placemark.country {
-                        output += "\nCountry: \(country)"
-                    }
-                    
                     if let postalCode = placemark.postalCode {
                         output += "\nPostal Code: \(postalCode)"
                     }
-                    
-                    if let timeZone = placemark.timeZone {
-                        output += "\nTime Zone: \(timeZone.identifier)"
-                    }
                 }
-            } catch {
-                output += "\n\nNote: Could not retrieve address details: \(error.localizedDescription)"
             }
+        } catch {
+            output += "\n\nNote: Could not retrieve location details: \(error.localizedDescription)"
         }
         
         return output
@@ -295,11 +358,11 @@ struct _LocationTool: Tool {
     let description = "Get the user's current location"
     @Generable
     struct Arguments {
-        @Guide(description: "Request precise location with detailed address information. Only request this if you absolutely need to know the user's exact location.")
+        @Guide(description: "Request precise location with detailed address information. Only enable this if you need to know the user's exact location.")
         var requestPreciseLocation: Bool = false
     }
     
-    func call(arguments: Arguments) async throws -> ToolOutput {
+    func call(arguments: Arguments) async throws -> [String] {
         let locationManager = CLLocationManager()
         
         // Check location authorization status
@@ -327,7 +390,7 @@ struct _LocationTool: Tool {
         }
     }
     
-    private func requestPermissionAndGetLocation(locationManager: CLLocationManager, requestPreciseLocation: Bool) async throws -> ToolOutput {
+    private func requestPermissionAndGetLocation(locationManager: CLLocationManager, requestPreciseLocation: Bool) async throws -> [String] {
         return try await withCheckedThrowingContinuation { continuation in
             let delegate = LocationPermissionDelegate(requestPreciseLocation: requestPreciseLocation) { result in
                 continuation.resume(with: result)
@@ -335,7 +398,8 @@ struct _LocationTool: Tool {
             
             locationManager.delegate = delegate
             
-            // Set accuracy based on precision preference
+            // Set accuracy based on precision preference BEFORE requesting authorization
+            // This helps iOS understand what level of permission we're requesting
             if requestPreciseLocation {
                 locationManager.desiredAccuracy = kCLLocationAccuracyBest
             } else {
@@ -351,7 +415,7 @@ struct _LocationTool: Tool {
         }
     }
     
-    private func getCurrentLocation(locationManager: CLLocationManager, requestPreciseLocation: Bool) async throws -> ToolOutput {
+    private func getCurrentLocation(locationManager: CLLocationManager, requestPreciseLocation: Bool) async throws -> [String] {
         return try await withCheckedThrowingContinuation { continuation in
             let delegate = LocationDelegate(requestPreciseLocation: requestPreciseLocation) { result in
                 continuation.resume(with: result)
@@ -378,22 +442,22 @@ struct _LocationTool: Tool {
 /// Safe wrapper for Location tool that handles errors gracefully
 struct LocationTool: Tool {
     let name = "Location"
-    let description = "Get the user's current location coordinates and optionally detailed address information"
+    let description = "Get the user's current location, coarse or precise. The user will be able to accept or deny your request, so you do not need to ask for permission."
     
     private let locationTool = _LocationTool()
     
     @Generable
     struct Arguments {
-        @Guide(description: "Whether to request precise location with detailed address information. If false, uses coarse location for privacy.")
+        @Guide(description: "Request precise location with detailed address information. Only enable this if you need to know the user's exact location.")
         var requestPreciseLocation: Bool = false
     }
     
-    func call(arguments: Arguments) async throws -> ToolOutput {
+    func call(arguments: Arguments) async throws -> [String] {
         do {
             let locationArgs = _LocationTool.Arguments(requestPreciseLocation: arguments.requestPreciseLocation)
             return try await locationTool.call(arguments: locationArgs)
         } catch {
-            return ToolOutput(error.localizedDescription)
+            return [error.localizedDescription]
         }
     }
 } 

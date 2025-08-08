@@ -258,7 +258,7 @@ struct Chat: Identifiable, Codable {
         
         self.systemPrompt = try container.decode(String.self, forKey: .systemPrompt)
         self.temperature = try container.decode(Double.self, forKey: .temperature)
-        self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? true // Default to true for old chats
+        self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false // Default to true for old chats
     }
     
     func encode(to encoder: Encoder) throws {

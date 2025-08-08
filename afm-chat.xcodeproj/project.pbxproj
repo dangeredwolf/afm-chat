@@ -28,6 +28,10 @@
 		36CBE63B2E0B94F300FE3FD4 /* LocationTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */; };
 		36CBE63C2E0B94F300FE3FD4 /* LocationTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */; };
 		36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = 36D70A042DF9482B006889A7 /* appclip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		36EC3F972E1359C0009B8F2F /* WebFetchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F962E1359C0009B8F2F /* WebFetchTool.swift */; };
+		36EC3F982E1359C0009B8F2F /* WebFetchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F962E1359C0009B8F2F /* WebFetchTool.swift */; };
+		36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F992E137295009B8F2F /* SearchTool.swift */; };
+		36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F992E137295009B8F2F /* SearchTool.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +70,8 @@
 		36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptTool.swift; sourceTree = "<group>"; };
 		36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTool.swift; sourceTree = "<group>"; };
 		36D70A042DF9482B006889A7 /* appclip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = appclip.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		36EC3F962E1359C0009B8F2F /* WebFetchTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFetchTool.swift; sourceTree = "<group>"; };
+		36EC3F992E137295009B8F2F /* SearchTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchTool.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -142,7 +148,9 @@
 			isa = PBXGroup;
 			children = (
 				36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */,
+				36EC3F992E137295009B8F2F /* SearchTool.swift */,
 				36CBE63A2E0B94F300FE3FD4 /* LocationTool.swift */,
+				36EC3F962E1359C0009B8F2F /* WebFetchTool.swift */,
 				3658A6942DFBA8A500254350 /* Weather.swift */,
 			);
 			path = Tools;
@@ -283,7 +291,9 @@
 			files = (
 				3658A6232DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				3658A6242DF9E89C00254350 /* ChatModels.swift in Sources */,
+				36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */,
 				3658A6252DF9E89C00254350 /* ChatBubble.swift in Sources */,
+				36EC3F982E1359C0009B8F2F /* WebFetchTool.swift in Sources */,
 				3658A6962DFBA8A500254350 /* Weather.swift in Sources */,
 				3658A6262DF9E89C00254350 /* SettingsView.swift in Sources */,
 				3658A6272DF9E89C00254350 /* ChatView.swift in Sources */,
@@ -298,6 +308,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				3658A6282DF9E89C00254350 /* ChatContainerView.swift in Sources */,
+				36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */,
+				36EC3F972E1359C0009B8F2F /* WebFetchTool.swift in Sources */,
 				3658A6292DF9E89C00254350 /* ChatModels.swift in Sources */,
 				3658A62A2DF9E89C00254350 /* ChatBubble.swift in Sources */,
 				3658A6972DFBA8A500254350 /* Weather.swift in Sources */,

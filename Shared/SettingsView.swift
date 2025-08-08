@@ -69,11 +69,11 @@ struct SettingsView: View {
                 }
                 
                 Section(header: Text("Tools")) {
-                    Text("The language model can use tools to enable more advanced functionality such as executing code or retrieving information from your device and the internet.")
+                    Text("The language model can use tools to enable more advanced functionality such as executing code or retrieving information from your device and the internet. Note: With tools enabled, the model might be less willing to answer general questions without using tools.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Toggle("Enable Tools", isOn: $tempToolsEnabled)
+                    Toggle("Enable Tools (Experimental)", isOn: $tempToolsEnabled)
                         .toggleStyle(SwitchToggleStyle())
                     
                     if tempToolsEnabled {
@@ -87,6 +87,13 @@ struct SettingsView: View {
                                 Image(systemName: "gear")
                                     .foregroundColor(.blue)
                                 Text("Code Interpreter")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            HStack {
+                                Image(systemName: "location")
+                                    .foregroundColor(.green)
+                                Text("Location")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }

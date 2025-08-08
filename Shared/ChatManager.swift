@@ -86,7 +86,7 @@ class ChatManager: ObservableObject {
         // Get system prompt and tools setting for this chat
         let chat = getChatById(chatId)
         let systemPrompt = chat?.systemPrompt ?? "You are a helpful assistant."
-        let toolsEnabled = chat?.toolsEnabled ?? true
+        let toolsEnabled = chat?.toolsEnabled ?? false
         
         // Get messages for transcript rehydration
         var messagesToInclude: [ChatMessage] = []
@@ -109,7 +109,9 @@ class ChatManager: ObservableObject {
         let tools: [any Tool] = toolsEnabled ? [
 //                SafeWeatherTool(),
                 JavaScriptTool(),
-                LocationTool()
+                LocationTool(),
+                WebFetchTool(),
+                SearchTool()
             ] : []
         
         print("Creating session with \(tools.count) tools, toolsEnabled: \(toolsEnabled)")
@@ -202,7 +204,7 @@ class ChatManager: ObservableObject {
     }
     
     var currentToolsEnabled: Bool {
-        return currentChat?.toolsEnabled ?? true
+        return currentChat?.toolsEnabled ?? false
     }
     
     init() {
@@ -217,7 +219,7 @@ class ChatManager: ObservableObject {
         // Get default settings from UserDefaults or use defaults
         let defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
         let defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
-        let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? true
+        let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
         
         let newChat = Chat(systemPrompt: defaultPrompt, temperature: defaultTemperature, toolsEnabled: defaultToolsEnabled)
         
@@ -596,15 +598,15 @@ class ChatManager: ObservableObject {
             
             for try await response in responseStream {
                 responseCount += 1
-                print("Response chunk \(responseCount): \(response.prefix(50))...")
+                print("Response chunk \(responseCount): \(response.content.prefix(50))...")
                 await MainActor.run {
-                    currentResponse = response
+                    currentResponse = response.content
                     
                     // Track the longest response we've seen to preserve content
-                    if response.count > maxContentLength {
-                        maxContentLength = response.count
-                        longestResponse = response
-                        print("New longest response: \(response.count) chars")
+                    if response.content.count > maxContentLength {
+                        maxContentLength = response.content.count
+                        longestResponse = response.content
+                        print("New longest response: \(response.content.count) chars")
                     }
                     
                     // Try to extract tool call information and full content from the session's transcript
@@ -783,7 +785,11 @@ class ChatManager: ObservableObject {
         case "Code Interpreter":
             return "Execute JavaScript code and returns the result"
         case "Location":
-            return "Get the user's current location (coarse by default for privacy, with option for precise location)"
+            return "Get the user's current location (coarse or precise)"
+        case "Web Fetch":
+            return "Fetch and extract content from web pages"
+        case "Web Search":
+            return "Search the web for information on any topic"
         default:
             return "Execute tool: \(toolName)"
         }

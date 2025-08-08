@@ -13,7 +13,7 @@ struct _JavaScriptTool: Tool {
         var code: String
     }
     
-    func call(arguments: Arguments) async throws -> ToolOutput {
+    func call(arguments: Arguments) async throws -> [String] {
         do {
             // Create a new JavaScript context for each execution
             let context = JSContext()!
@@ -60,7 +60,7 @@ struct _JavaScriptTool: Tool {
                 \(arguments.code)
                 ```
                 """
-                return ToolOutput(errorMessage)
+                return [errorMessage]
             }
             
             // Format the output
@@ -94,7 +94,7 @@ struct _JavaScriptTool: Tool {
                 output = "undefined"
             }
             
-            return ToolOutput(output)
+            return [output]
             
         } catch {
             throw NSError(
@@ -119,12 +119,12 @@ struct JavaScriptTool: Tool {
         var code: String
     }
     
-    func call(arguments: Arguments) async throws -> ToolOutput {
+    func call(arguments: Arguments) async throws-> [String] {
         do {
             let jsArgs = _JavaScriptTool.Arguments(code: arguments.code)
             return try await jsTool.call(arguments: jsArgs)
         } catch {
-            return ToolOutput(error.localizedDescription)
+            return [error.localizedDescription]
         }
     }
 } 

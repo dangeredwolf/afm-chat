@@ -285,7 +285,7 @@ struct GlobalSettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Toggle("Enable Tools by Default", isOn: $defaultToolsEnabled)
+                    Toggle("Enable Tools (Experimental)", isOn: $defaultToolsEnabled)
                         .toggleStyle(SwitchToggleStyle())
                     
                     if defaultToolsEnabled {
@@ -306,7 +306,7 @@ struct GlobalSettingsView: View {
                             HStack {
                                 Image(systemName: "location")
                                     .foregroundColor(.green)
-                                Text("Location Services")
+                                Text("Location")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -337,7 +337,7 @@ struct GlobalSettingsView: View {
         .onAppear {
             defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
             defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
-            defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? true
+            defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
         }
     }
 }
