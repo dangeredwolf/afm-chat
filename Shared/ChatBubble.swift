@@ -389,21 +389,16 @@ struct ChatBubble: View {
                 }
             }
         } else {
-            let contentParts = message.content.components(separatedBy: "\n\n")
-            ForEach(Array(contentParts.enumerated()), id: \.offset) { _, part in
-                if !part.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Markdown(part)
-                        .markdownTextStyle(\.text) {
-                            ForegroundColor(.primary)
-                        }
-                        .markdownTextStyle(\.code) {
-                            FontFamilyVariant(.monospaced)
-                            FontSize(.em(0.85))
-                            ForegroundColor(.primary)
-                            BackgroundColor(.primary.opacity(0.1))
-                        }
+            Markdown(message.content)
+                .markdownTextStyle(\.text) {
+                    ForegroundColor(.primary)
                 }
-            }
+                .markdownTextStyle(\.code) {
+                    FontFamilyVariant(.monospaced)
+                    FontSize(.em(0.85))
+                    ForegroundColor(.primary)
+                    BackgroundColor(.primary.opacity(0.1))
+                }
         }
     }
 

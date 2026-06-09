@@ -118,14 +118,52 @@ enum ChatError: Identifiable, Codable {
 
 // Tool call tracking
 struct ToolCallInfo: Identifiable, Codable {
-    let id = UUID()
+    let id: UUID
+    var transcriptID: String
     let toolName: String
     let toolDescription: String
     let arguments: String
     var status: ToolCallStatus = .pending
     var result: String?
     var error: String?
-    let timestamp = Date()
+    let timestamp: Date
+
+    init(
+        toolName: String,
+        toolDescription: String,
+        arguments: String,
+        status: ToolCallStatus = .pending,
+        result: String? = nil,
+        error: String? = nil,
+        transcriptID: String = UUID().uuidString
+    ) {
+        self.id = UUID()
+        self.transcriptID = transcriptID
+        self.toolName = toolName
+        self.toolDescription = toolDescription
+        self.arguments = arguments
+        self.status = status
+        self.result = result
+        self.error = error
+        self.timestamp = Date()
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, transcriptID, toolName, toolDescription, arguments, status, result, error, timestamp
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        transcriptID = try container.decodeIfPresent(String.self, forKey: .transcriptID) ?? id.uuidString
+        toolName = try container.decode(String.self, forKey: .toolName)
+        toolDescription = try container.decode(String.self, forKey: .toolDescription)
+        arguments = try container.decode(String.self, forKey: .arguments)
+        status = try container.decodeIfPresent(ToolCallStatus.self, forKey: .status) ?? .pending
+        result = try container.decodeIfPresent(String.self, forKey: .result)
+        error = try container.decodeIfPresent(String.self, forKey: .error)
+        timestamp = try container.decodeIfPresent(Date.self, forKey: .timestamp) ?? Date()
+    }
 }
 
 enum ToolCallStatus: String, Codable, CaseIterable {

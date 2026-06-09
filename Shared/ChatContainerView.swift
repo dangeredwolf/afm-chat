@@ -183,6 +183,14 @@ struct ChatDetailView: View {
             .navigationTitle(chatTitle)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    if chatManager.showsContextUsageIndicator,
+                       let usage = chatManager.contextUsage {
+                        ContextUsageIndicator(
+                            usage: usage,
+                            contextWindowSizes: chatManager.contextWindowSizes
+                        )
+                    }
+
                     Button(action: { showingSettings = true }) {
                         Image(systemName: "gear")
                     }
@@ -319,6 +327,7 @@ struct ChatDetailView: View {
                     let newChatId = chatManager.createNewChat()
                     chatManager.currentChatId = newChatId
                 }
+                chatManager.refreshContextWindowMetadata()
             }
             .onChange(of: chatManager.currentChat?.title) { newTitle in
                 // Update title when chat title changes (e.g., after first message)

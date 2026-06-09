@@ -100,4 +100,29 @@ enum AFMModelCatalog {
             return PrivateCloudComputeLanguageModel()
         }
     }
+
+    @available(iOS 27, *)
+    static func contextSize(for choice: LLMModelChoice) async throws -> Int {
+        switch choice {
+        case .onDevice:
+            return SystemLanguageModel.default.contextSize
+        case .privateCloudCompute:
+            return try await PrivateCloudComputeLanguageModel().contextSize
+        }
+    }
+
+    @available(iOS 27, *)
+    static func allContextSizes() async -> [LLMModelChoice: Int] {
+        var sizes: [LLMModelChoice: Int] = [
+            .onDevice: SystemLanguageModel.default.contextSize
+        ]
+
+        if AFMEntitlements.hasPrivateCloudCompute, isModelAvailable(.privateCloudCompute) {
+            if let pccSize = try? await PrivateCloudComputeLanguageModel().contextSize {
+                sizes[.privateCloudCompute] = pccSize
+            }
+        }
+
+        return sizes
+    }
 }

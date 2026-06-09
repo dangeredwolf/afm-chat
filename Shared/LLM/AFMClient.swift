@@ -75,6 +75,11 @@ private final class AFMSession: LLMSession {
         }
     }
 
+    func currentContextUsage(contextLimit: Int) -> LLMContextUsage? {
+        guard #available(iOS 27, *) else { return nil }
+        return makeContextUsage(contextLimit: contextLimit)
+    }
+
     func streamResponse(to prompt: String, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             Task {
@@ -159,6 +164,19 @@ private final class AFMSession: LLMSession {
         }
     }
 
+    @available(iOS 27, *)
+    private func makeContextUsage(contextLimit: Int) -> LLMContextUsage {
+        let usage = session.usage
+        return LLMContextUsage(
+            usedTokens: usage.totalTokenCount,
+            contextLimit: contextLimit,
+            inputTokens: usage.input.totalTokenCount,
+            outputTokens: usage.output.totalTokenCount,
+            reasoningTokens: usage.output.reasoningTokenCount,
+            model: configuration.model
+        )
+    }
+
     private func yieldReasoningUpdate(
         _ snapshot: ReasoningSnapshot,
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
@@ -212,9 +230,10 @@ private final class AFMSession: LLMSession {
             case .toolCalls(let calls):
                 for call in calls {
                     let callEvent = LLMToolCallEvent(
+                        transcriptID: call.id,
                         toolName: call.toolName,
                         toolDescription: call.toolName,
-                        arguments: String(describing: call.arguments),
+                        arguments: call.arguments.jsonString,
                         status: .executing
                     )
                     toolCalls.append(callEvent)

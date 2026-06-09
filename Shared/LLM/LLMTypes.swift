@@ -60,19 +60,90 @@ public struct LLMModelOption: Identifiable, Sendable {
     public var description: String { choice.description }
 }
 
+public struct LLMContextUsage: Equatable, Sendable {
+    public var usedTokens: Int
+    public var contextLimit: Int
+    public var inputTokens: Int
+    public var outputTokens: Int
+    public var reasoningTokens: Int
+    public var model: LLMModelChoice
+
+    public init(
+        usedTokens: Int,
+        contextLimit: Int,
+        inputTokens: Int,
+        outputTokens: Int,
+        reasoningTokens: Int,
+        model: LLMModelChoice
+    ) {
+        self.usedTokens = usedTokens
+        self.contextLimit = contextLimit
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.reasoningTokens = reasoningTokens
+        self.model = model
+    }
+
+    public var remainingTokens: Int {
+        max(0, contextLimit - usedTokens)
+    }
+
+    public var fillFraction: Double {
+        guard contextLimit > 0 else { return 0 }
+        return min(1, Double(usedTokens) / Double(contextLimit))
+    }
+}
+
+public struct LLMHistoryToolCall: Sendable {
+    public let transcriptID: String
+    public let toolName: String
+    public let argumentsJSON: String
+    public let result: String?
+    public let error: String?
+
+    public init(
+        transcriptID: String,
+        toolName: String,
+        argumentsJSON: String,
+        result: String? = nil,
+        error: String? = nil
+    ) {
+        self.transcriptID = transcriptID
+        self.toolName = toolName
+        self.argumentsJSON = argumentsJSON
+        self.result = result
+        self.error = error
+    }
+}
+
+public struct LLMHistoryEntry: Sendable {
+    public let isUser: Bool
+    public let content: String
+    public let toolCalls: [LLMHistoryToolCall]
+
+    public init(isUser: Bool, content: String, toolCalls: [LLMHistoryToolCall] = []) {
+        self.isUser = isUser
+        self.content = content
+        self.toolCalls = toolCalls
+    }
+}
+
 public struct LLMSessionConfiguration: Sendable {
     public var model: LLMModelChoice
     public var temperature: Double
     public var reasoningLevel: LLMReasoningLevel
+    public var history: [LLMHistoryEntry]
 
     public init(
         model: LLMModelChoice = .onDevice,
         temperature: Double = 1.0,
-        reasoningLevel: LLMReasoningLevel = .moderate
+        reasoningLevel: LLMReasoningLevel = .moderate,
+        history: [LLMHistoryEntry] = []
     ) {
         self.model = model
         self.temperature = temperature
         self.reasoningLevel = reasoningLevel
+        self.history = history
     }
 }
 
@@ -84,6 +155,13 @@ public protocol LLMClient {
 public protocol LLMSession {
     func streamResponse(to prompt: String, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error>
     func respond(to prompt: String, temperature: Double) async throws -> String
+    func currentContextUsage(contextLimit: Int) -> LLMContextUsage?
+}
+
+extension LLMSession {
+    public func currentContextUsage(contextLimit: Int) -> LLMContextUsage? {
+        nil
+    }
 }
 
 public protocol LLMTool {
@@ -113,6 +191,7 @@ public enum LLMToolCallStatus: String, Codable {
 
 public struct LLMToolCallEvent: Codable, Identifiable {
     public let id = UUID()
+    public let transcriptID: String
     public let toolName: String
     public let toolDescription: String
     public let arguments: String
@@ -120,12 +199,16 @@ public struct LLMToolCallEvent: Codable, Identifiable {
     public var result: String?
     public var error: String?
 
-    public init(toolName: String,
-                toolDescription: String,
-                arguments: String,
-                status: LLMToolCallStatus,
-                result: String? = nil,
-                error: String? = nil) {
+    public init(
+        transcriptID: String = UUID().uuidString,
+        toolName: String,
+        toolDescription: String,
+        arguments: String,
+        status: LLMToolCallStatus,
+        result: String? = nil,
+        error: String? = nil
+    ) {
+        self.transcriptID = transcriptID
         self.toolName = toolName
         self.toolDescription = toolDescription
         self.arguments = arguments

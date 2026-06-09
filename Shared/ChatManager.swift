@@ -24,12 +24,15 @@ class ChatManager: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var editingMessageId: UUID? = nil
     @Published var savedMessagesForEdit: [ChatMessage] = []
+    @Published var contextUsage: LLMContextUsage?
+    @Published var contextWindowSizes: [LLMModelChoice: Int] = [:]
     
     // Temporary chat that hasn't been saved yet
     @Published var temporaryChat: Chat? = nil
     
     // Store sessions per chat to maintain context
     private var sessions: [UUID: LLMSession] = [:]
+    private var cachedContextLimit: Int?
     
     // Separate session for generating titles (not tied to any specific chat)
     private lazy var titleGenerationSession: LLMSession = {
@@ -107,9 +110,23 @@ class ChatManager: ObservableObject {
             }
         }
         
-        // Create transcript from existing messages
-        // let transcript = createTranscriptFromMessages(messagesToInclude)
-        
+        let history = messagesToInclude.map { message in
+            LLMHistoryEntry(
+                isUser: message.isUser,
+                content: message.content,
+                toolCalls: message.toolCalls.compactMap { toolCall in
+                    guard toolCall.status == .completed || toolCall.status == .failed else { return nil }
+                    return LLMHistoryToolCall(
+                        transcriptID: toolCall.transcriptID,
+                        toolName: toolCall.toolName,
+                        argumentsJSON: toolCall.arguments,
+                        result: toolCall.result,
+                        error: toolCall.error
+                    )
+                }
+            )
+        }
+
         // Create session with conditional tools based on chat settings and per-tool flags
         var toolList: [LLMTool] = []
         if toolsEnabled {
@@ -123,40 +140,18 @@ class ChatManager: ObservableObject {
         
 //        print("Creating session with \(tools.count) tools, toolsEnabled: \(toolsEnabled)")
         
-        // Create session with transcript rehydration (transcript disabled for now)
         return LLMProviderManager.shared.client.createSession(
             instructions: systemPrompt,
             tools: toolList,
             configuration: LLMSessionConfiguration(
                 model: chat?.model ?? .onDevice,
                 temperature: chat?.temperature ?? 1.0,
-                reasoningLevel: chat?.reasoningLevel ?? .moderate
+                reasoningLevel: chat?.reasoningLevel ?? .moderate,
+                history: history
             )
         )
     }
-    
-    // Convert ChatMessages to Transcript for session rehydration
-//    private func createTranscriptFromMessages(_ messages: [ChatMessage]) -> Transcript {
-//        let entries: [Transcript.Entry] = messages.compactMap { message in
-//            if message.isUser {
-//                // Create user prompt entry
-//                let textSegment = Transcript.Segment.text(Transcript.TextSegment(content: message.content))
-//                let prompt = Transcript.Prompt(segments: [textSegment])
-//                return .prompt(prompt)
-//            } else {
-//                // Create assistant response entry (only include non-empty responses)
-//                if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-//                    let textSegment = Transcript.Segment.text(Transcript.TextSegment(content: message.content))
-//                    let response = Transcript.Response(assetIDs: [], segments: [textSegment])
-//                    return .response(response)
-//                }
-//                return nil
-//            }
-//        }
-//        
-        // TODO: This builds fine but crashes in 26.0 beta 2
-//        return Transcript.init(entries: entries)
-//    }
+
     
     // Helper method to get chat by ID from either temporary or saved chats
     private func getChatById(_ chatId: UUID) -> Chat? {
@@ -223,6 +218,13 @@ class ChatManager: ObservableObject {
     
     var currentToolsEnabled: Bool {
         return currentChat?.toolsEnabled ?? false
+    }
+
+    var showsContextUsageIndicator: Bool {
+        if #available(iOS 27, *) {
+            return (contextUsage?.usedTokens ?? 0) > 0
+        }
+        return false
     }
     
     init() {
@@ -321,6 +323,7 @@ class ChatManager: ObservableObject {
         
         // Recreate session with new settings and current transcript
         recreateCurrentSession()
+        refreshContextWindowMetadata()
         
         // Also save as defaults
         UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
@@ -493,6 +496,8 @@ class ChatManager: ObservableObject {
         // This is important when switching between chats or when settings change
         let newSession = createSessionForChat(chatId: chatId)
         sessions[chatId] = newSession
+        refreshContextWindowMetadata()
+        refreshContextUsage()
     }
     
     // Force recreation of the current session (useful when settings change)
@@ -500,6 +505,39 @@ class ChatManager: ObservableObject {
         guard let chatId = currentChatId else { return }
         let newSession = createSessionForChat(chatId: chatId)
         sessions[chatId] = newSession
+        refreshContextWindowMetadata()
+        refreshContextUsage()
+    }
+
+    func refreshContextWindowMetadata() {
+        guard #available(iOS 27, *) else {
+            contextWindowSizes = [:]
+            cachedContextLimit = nil
+            contextUsage = nil
+            return
+        }
+
+        let model = currentModel
+        Task { @MainActor in
+            await self.loadContextWindowMetadata(for: model)
+        }
+    }
+
+    @available(iOS 27, *)
+    private func loadContextWindowMetadata(for model: LLMModelChoice) async {
+        let sizes = await AFMModelCatalog.allContextSizes()
+        contextWindowSizes = sizes
+        cachedContextLimit = sizes[model]
+        refreshContextUsage()
+    }
+
+    func refreshContextUsage() {
+        guard #available(iOS 27, *), let limit = cachedContextLimit else {
+            contextUsage = nil
+            return
+        }
+
+        contextUsage = currentSession.currentContextUsage(contextLimit: limit)
     }
     
     private func saveChats() {
@@ -675,7 +713,8 @@ class ChatManager: ObservableObject {
                                 arguments: call.arguments,
                                 status: status,
                                 result: call.result,
-                                error: call.error
+                                error: call.error,
+                                transcriptID: call.transcriptID
                             )
                         }
                         self.updateInFlightAssistantMessage(
@@ -694,11 +733,13 @@ class ChatManager: ObservableObject {
                             reasoningTokenCount: latestReasoningTokenCount
                         )
                     }
+                    self.refreshContextUsage()
                 }
             }
             
             await MainActor.run {
                 self.isLoading = false
+                self.refreshContextUsage()
                 self.saveChats()
             }
         } catch {
@@ -724,6 +765,7 @@ class ChatManager: ObservableObject {
                     }
                 }
                 self.isLoading = false
+                self.refreshContextUsage()
                 self.saveChats()
             }
         }
