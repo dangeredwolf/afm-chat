@@ -14,6 +14,7 @@ enum ChatError: Identifiable, Codable {
     case unsupportedGuide(String)
     case decodingFailure(String)
     case assetsUnavailable(String)
+    case privateCloudComputeNotPermitted(String)
     case unknownError(String)
     
     var id: String {
@@ -23,6 +24,7 @@ enum ChatError: Identifiable, Codable {
         case .unsupportedGuide: return "unsupportedGuide"
         case .decodingFailure: return "decodingFailure"
         case .assetsUnavailable: return "assetsUnavailable"
+        case .privateCloudComputeNotPermitted: return "pccNotPermitted"
         case .unknownError: return "unknownError"
         }
     }
@@ -34,6 +36,7 @@ enum ChatError: Identifiable, Codable {
         case .unsupportedGuide: return "Unsupported Guide"
         case .decodingFailure: return "Response Processing Error"
         case .assetsUnavailable: return "Language Model Unavailable"
+        case .privateCloudComputeNotPermitted: return "Private Cloud Compute Unavailable"
         case .unknownError: return "Unknown Error"
         }
     }
@@ -50,6 +53,14 @@ enum ChatError: Identifiable, Codable {
             return "Failed to process the response. Please try again.\n\nDetails: \(message)"
         case .assetsUnavailable(let message):
             return "The on-device language model is temporarily unavailable. Please try again later.\n\nDetails: \(message)"
+        case .privateCloudComputeNotPermitted:
+            return """
+            Private Cloud Compute is not enabled for this app. Apple requires a managed entitlement before third-party apps can use PCC.
+
+            To enable it, an Account Holder must request the Private Cloud Compute capability in Certificates, Identifiers & Profiles, then add it to this app in Xcode.
+
+            Switch to On-Device in Settings to continue chatting.
+            """
         case .unknownError(let message):
             return "An unexpected error occurred. Please try again.\n\nDetails: \(message)"
         }
@@ -57,7 +68,7 @@ enum ChatError: Identifiable, Codable {
     
     var isRecoverable: Bool {
         switch self {
-        case .guardrailViolation, .exceededContextWindowSize, .unsupportedGuide:
+        case .guardrailViolation, .exceededContextWindowSize, .unsupportedGuide, .privateCloudComputeNotPermitted:
             return false
         case .decodingFailure, .assetsUnavailable, .unknownError:
             return true
@@ -71,6 +82,7 @@ enum ChatError: Identifiable, Codable {
         case .unsupportedGuide: return "questionmark.circle"
         case .decodingFailure: return "exclamationmark.triangle"
         case .assetsUnavailable: return "server.rack"
+        case .privateCloudComputeNotPermitted: return "icloud.slash"
         case .unknownError: return "exclamationmark.circle"
         }
     }
@@ -78,6 +90,9 @@ enum ChatError: Identifiable, Codable {
     static func fromError(_ error: Error) -> ChatError {
         // Generic mapping independent of provider
         let errorDescription = error.localizedDescription
+        if errorDescription.localizedCaseInsensitiveContains("operation not permitted") {
+            return .privateCloudComputeNotPermitted(errorDescription)
+        }
         if errorDescription.localizedCaseInsensitiveContains("context") ||
             errorDescription.localizedCaseInsensitiveContains("too long") {
             return .exceededContextWindowSize(errorDescription)
@@ -145,24 +160,46 @@ struct ChatMessage: Identifiable {
     let timestamp: Date
     let error: ChatError?
     var toolCalls: [ToolCallInfo]
-    
-    init(content: String, isUser: Bool, error: ChatError? = nil, toolCalls: [ToolCallInfo] = []) {
+    var reasoningContent: String?
+    var reasoningTokenCount: Int?
+
+    init(
+        content: String,
+        isUser: Bool,
+        error: ChatError? = nil,
+        toolCalls: [ToolCallInfo] = [],
+        reasoningContent: String? = nil,
+        reasoningTokenCount: Int? = nil
+    ) {
         self.id = UUID()
         self.content = content
         self.isUser = isUser
         self.timestamp = Date()
         self.error = error
         self.toolCalls = toolCalls
+        self.reasoningContent = reasoningContent
+        self.reasoningTokenCount = reasoningTokenCount
     }
-    
+
     // Private initializer for decoding
-    private init(id: UUID, content: String, isUser: Bool, timestamp: Date, error: ChatError?, toolCalls: [ToolCallInfo]) {
+    private init(
+        id: UUID,
+        content: String,
+        isUser: Bool,
+        timestamp: Date,
+        error: ChatError?,
+        toolCalls: [ToolCallInfo],
+        reasoningContent: String?,
+        reasoningTokenCount: Int?
+    ) {
         self.id = id
         self.content = content
         self.isUser = isUser
         self.timestamp = timestamp
         self.error = error
         self.toolCalls = toolCalls
+        self.reasoningContent = reasoningContent
+        self.reasoningTokenCount = reasoningTokenCount
     }
     
     var isError: Bool {
@@ -176,12 +213,20 @@ struct ChatMessage: Identifiable {
     var hasActiveToolCalls: Bool {
         return toolCalls.contains { $0.status == .pending || $0.status == .executing }
     }
+
+    var hasReasoningContent: Bool {
+        if (reasoningTokenCount ?? 0) > 0 {
+            return true
+        }
+        guard let reasoningContent else { return false }
+        return !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 // When adding tool calls, etc it broke loading old chats, so this lets us carefully load properties to make everything work
 extension ChatMessage: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, content, isUser, timestamp, error, toolCalls
+        case id, content, isUser, timestamp, error, toolCalls, reasoningContent, reasoningTokenCount
     }
     
     init(from decoder: Decoder) throws {
@@ -196,8 +241,19 @@ extension ChatMessage: Codable {
         // Optional properties (new additions that might not exist in old data)
         let error = try container.decodeIfPresent(ChatError.self, forKey: .error)
         let toolCalls = try container.decodeIfPresent([ToolCallInfo].self, forKey: .toolCalls) ?? []
+        let reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
+        let reasoningTokenCount = try container.decodeIfPresent(Int.self, forKey: .reasoningTokenCount)
         
-        self.init(id: id, content: content, isUser: isUser, timestamp: timestamp, error: error, toolCalls: toolCalls)
+        self.init(
+            id: id,
+            content: content,
+            isUser: isUser,
+            timestamp: timestamp,
+            error: error,
+            toolCalls: toolCalls,
+            reasoningContent: reasoningContent,
+            reasoningTokenCount: reasoningTokenCount
+        )
     }
     
     func encode(to encoder: Encoder) throws {
@@ -208,6 +264,8 @@ extension ChatMessage: Codable {
         try container.encode(timestamp, forKey: .timestamp)
         try container.encodeIfPresent(error, forKey: .error)
         try container.encode(toolCalls, forKey: .toolCalls)
+        try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
+        try container.encodeIfPresent(reasoningTokenCount, forKey: .reasoningTokenCount)
     }
 }
 
@@ -218,6 +276,8 @@ struct Chat: Identifiable, Codable {
     let createdAt: Date
     var systemPrompt: String
     var temperature: Double
+    var model: LLMModelChoice
+    var reasoningLevel: LLMReasoningLevel
     var toolsEnabled: Bool
     // Per-tool enablement (effective only when toolsEnabled == true)
     var toolCodeInterpreterEnabled: Bool
@@ -227,6 +287,8 @@ struct Chat: Identifiable, Codable {
     init(title: String = "New Chat",
          systemPrompt: String = "You are a helpful assistant.",
          temperature: Double = 1.0,
+         model: LLMModelChoice = .onDevice,
+         reasoningLevel: LLMReasoningLevel = .moderate,
          toolsEnabled: Bool = true,
          toolCodeInterpreterEnabled: Bool = true,
          toolWebFetchEnabled: Bool = true,
@@ -237,6 +299,8 @@ struct Chat: Identifiable, Codable {
         self.createdAt = Date()
         self.systemPrompt = systemPrompt
         self.temperature = temperature
+        self.model = model
+        self.reasoningLevel = reasoningLevel
         self.toolsEnabled = toolsEnabled
         self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
         self.toolWebFetchEnabled = toolWebFetchEnabled
@@ -245,7 +309,7 @@ struct Chat: Identifiable, Codable {
     
     // Custom Codable implementation for backward compatibility
     private enum CodingKeys: String, CodingKey {
-        case id, title, messages, createdAt, systemPrompt, temperature, toolsEnabled,
+        case id, title, messages, createdAt, systemPrompt, temperature, model, reasoningLevel, toolsEnabled,
              toolCodeInterpreterEnabled, toolLocationEnabled, toolWebFetchEnabled, toolWebSearchEnabled
     }
     
@@ -268,6 +332,8 @@ struct Chat: Identifiable, Codable {
         
         self.systemPrompt = try container.decode(String.self, forKey: .systemPrompt)
         self.temperature = try container.decode(Double.self, forKey: .temperature)
+        self.model = try container.decodeIfPresent(LLMModelChoice.self, forKey: .model) ?? .onDevice
+        self.reasoningLevel = try container.decodeIfPresent(LLMReasoningLevel.self, forKey: .reasoningLevel) ?? .moderate
         self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false
         self.toolCodeInterpreterEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolCodeInterpreterEnabled) ?? true
         _ = try container.decodeIfPresent(Bool.self, forKey: .toolLocationEnabled)
@@ -283,6 +349,8 @@ struct Chat: Identifiable, Codable {
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(temperature, forKey: .temperature)
+        try container.encode(model, forKey: .model)
+        try container.encode(reasoningLevel, forKey: .reasoningLevel)
         try container.encode(toolsEnabled, forKey: .toolsEnabled)
         try container.encode(toolCodeInterpreterEnabled, forKey: .toolCodeInterpreterEnabled)
         try container.encode(toolWebFetchEnabled, forKey: .toolWebFetchEnabled)

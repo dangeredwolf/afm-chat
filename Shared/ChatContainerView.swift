@@ -201,6 +201,8 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: newPrompt,
                                 temperature: chatManager.currentTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
@@ -216,6 +218,42 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: chatManager.currentSystemPrompt,
                                 temperature: newTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                )
+                            )
+                        }
+                    ),
+                    model: Binding(
+                        get: { chatManager.currentModel },
+                        set: { newModel in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                model: newModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                )
+                            )
+                        }
+                    ),
+                    reasoningLevel: Binding(
+                        get: { chatManager.currentReasoningLevel },
+                        set: { newReasoningLevel in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: newReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
@@ -231,6 +269,8 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: chatManager.currentSystemPrompt,
                                 temperature: chatManager.currentTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: newToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
@@ -246,6 +286,8 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: chatManager.currentSystemPrompt,
                                 temperature: chatManager.currentTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
@@ -261,6 +303,8 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: chatManager.currentSystemPrompt,
                                 temperature: chatManager.currentTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
@@ -276,6 +320,8 @@ struct ChatDetailView: View {
                             chatManager.updateChatSettings(
                                 systemPrompt: chatManager.currentSystemPrompt,
                                 temperature: chatManager.currentTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
@@ -312,6 +358,8 @@ struct GlobalSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var defaultPrompt: String = ""
     @State private var defaultTemperature: Double = 1.0
+    @State private var defaultModel: LLMModelChoice = .onDevice
+    @State private var defaultReasoningLevel: LLMReasoningLevel = .moderate
     @State private var defaultToolsEnabled: Bool = true
     @State private var defaultToolCodeInterpreterEnabled: Bool = true
     @State private var defaultToolWebFetchEnabled: Bool = true
@@ -340,6 +388,51 @@ struct GlobalSettingsView: View {
                             .fontWeight(.medium)
                         
                         Slider(value: $defaultTemperature, in: 0.0...2.0, step: 0.1)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Model")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        Picker("Model", selection: $defaultModel) {
+                            ForEach(AFMModelCatalog.modelOptions()) { option in
+                                Text(option.displayName).tag(option.choice)
+                            }
+                        }
+                        .pickerStyle(.menu)
+
+                        if let option = AFMModelCatalog.modelOptions().first(where: { $0.choice == defaultModel }) {
+                            Text(option.description)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            if !option.isAvailable,
+                               let note = option.unavailabilityNote {
+                                Text(note)
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                    }
+
+                    if AFMModelCatalog.supportsReasoning(defaultModel) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Reasoning Level")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+
+                            Picker("Reasoning Level", selection: $defaultReasoningLevel) {
+                                ForEach(LLMReasoningLevel.allCases) { level in
+                                    Text(level.displayName).tag(level)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text(defaultReasoningLevel.description)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
                 
@@ -389,6 +482,8 @@ struct GlobalSettingsView: View {
                     Button("Save") {
                         UserDefaults.standard.set(defaultPrompt, forKey: "systemPrompt")
                         UserDefaults.standard.set(defaultTemperature, forKey: "temperature")
+                        UserDefaults.standard.set(defaultModel.rawValue, forKey: "model")
+                        UserDefaults.standard.set(defaultReasoningLevel.rawValue, forKey: "reasoningLevel")
                         UserDefaults.standard.set(defaultToolsEnabled, forKey: "toolsEnabled")
                         UserDefaults.standard.set(defaultToolCodeInterpreterEnabled, forKey: "toolCodeInterpreterEnabled")
                         UserDefaults.standard.set(defaultToolWebFetchEnabled, forKey: "toolWebFetchEnabled")
@@ -401,6 +496,12 @@ struct GlobalSettingsView: View {
         .onAppear {
             defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
             defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
+            defaultModel = LLMModelChoice(
+                rawValue: UserDefaults.standard.string(forKey: "model") ?? LLMModelChoice.onDevice.rawValue
+            ) ?? .onDevice
+            defaultReasoningLevel = LLMReasoningLevel(
+                rawValue: UserDefaults.standard.string(forKey: "reasoningLevel") ?? LLMReasoningLevel.moderate.rawValue
+            ) ?? .moderate
             defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
             defaultToolCodeInterpreterEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
             defaultToolWebFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true

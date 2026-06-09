@@ -8,6 +8,126 @@
 import SwiftUI
 import MarkdownUI
 
+struct ReasoningView: View {
+    let reasoningContent: String?
+    let reasoningTokenCount: Int?
+    let isStreaming: Bool
+    @State private var isExpanded = false
+
+    private var tokenLabel: String? {
+        guard let reasoningTokenCount, reasoningTokenCount > 0 else { return nil }
+        return "\(reasoningTokenCount) tokens"
+    }
+
+    private var bodyText: String? {
+        if let reasoningContent,
+           !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return reasoningContent
+        }
+        if isStreaming, tokenLabel != nil {
+            return "Thinking…"
+        }
+        if tokenLabel != nil {
+            return ""
+        }
+        return nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    if isStreaming {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .frame(width: 16, height: 16)
+                    } else {
+                        Image(systemName: "brain.head.profile")
+                            .foregroundColor(.purple)
+                            .frame(width: 16, height: 16)
+                    }
+
+                    HStack(spacing: 4) {
+                        Text("Thinking")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+
+                        if isStreaming {
+                            Text("...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        if let tokenLabel {
+                            Text("(\(tokenLabel))")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        } else if let reasoningContent {
+                            Text("(\(reasoningContent.count) chars)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            if isExpanded, let bodyText {
+                VStack(alignment: .leading, spacing: 8) {
+                    Divider()
+                        .padding(.horizontal, 12)
+
+                    ScrollView {
+                        Text(bodyText)
+                            .font(.caption)
+                            .fontDesign(.monospaced)
+                            .foregroundColor(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 200)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(Color.purple.opacity(0.05))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.purple.opacity(0.25), lineWidth: 1)
+        )
+        .onAppear {
+            if isStreaming {
+                isExpanded = true
+            }
+        }
+        .onChange(of: isStreaming) { _, streaming in
+            if streaming {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded = true
+                }
+            }
+        }
+    }
+}
+
 struct ToolCallView: View {
     let toolCall: ToolCallInfo
     @State private var isExpanded: Bool = false
@@ -206,12 +326,14 @@ struct ToolCallView: View {
 
 struct ChatBubble: View {
     let message: ChatMessage
+    let isStreaming: Bool
     let onEdit: ((UUID) -> Void)?
     let onCopy: ((UUID) -> Void)?
     let onRetry: ((UUID) -> Void)?
-    
-    init(message: ChatMessage, onEdit: ((UUID) -> Void)? = nil, onCopy: ((UUID) -> Void)? = nil, onRetry: ((UUID) -> Void)? = nil) {
+
+    init(message: ChatMessage, isStreaming: Bool = false, onEdit: ((UUID) -> Void)? = nil, onCopy: ((UUID) -> Void)? = nil, onRetry: ((UUID) -> Void)? = nil) {
         self.message = message
+        self.isStreaming = isStreaming
         self.onEdit = onEdit
         self.onCopy = onCopy
         self.onRetry = onRetry
@@ -268,6 +390,14 @@ struct ChatBubble: View {
                     } else {
                         // AI messages: rendered markdown with inline tool calls
                         VStack(alignment: .leading, spacing: 8) {
+                            if message.hasReasoningContent {
+                                ReasoningView(
+                                    reasoningContent: message.reasoningContent,
+                                    reasoningTokenCount: message.reasoningTokenCount,
+                                    isStreaming: isStreaming
+                                )
+                            }
+
                             if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 // Split content into paragraphs and try to place tool calls inline
                                 let contentParts = message.content.components(separatedBy: "\n\n")
@@ -306,7 +436,6 @@ struct ChatBubble: View {
                                     }
                                 }
                             } else if message.hasToolCalls {
-                                // If no content, just show tool calls
                                 VStack(alignment: .leading, spacing: 6) {
                                     ForEach(message.toolCalls) { toolCall in
                                         ToolCallView(toolCall: toolCall)

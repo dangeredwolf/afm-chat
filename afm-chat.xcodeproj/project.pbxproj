@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -25,6 +25,12 @@
 		36984D5F2E45DB6A00CDC79C /* LLMTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */; };
 		36984D602E45DB6A00CDC79C /* AFMClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D5B2E45DB6A00CDC79C /* AFMClient.swift */; };
 		36984D612E45DB6A00CDC79C /* LLMTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */; };
+		36984D622E45DB6B00CDC79C /* AFMConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D632E45DB6B00CDC79C /* AFMConfiguration.swift */; };
+		36984D642E45DB6B00CDC79C /* AFMConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D632E45DB6B00CDC79C /* AFMConfiguration.swift */; };
+		36984D652E45DB6C00CDC79C /* AFMModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D662E45DB6C00CDC79C /* AFMModelCatalog.swift */; };
+		36984D672E45DB6C00CDC79C /* AFMModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D662E45DB6C00CDC79C /* AFMModelCatalog.swift */; };
+		36984D682E45DB6D00CDC79C /* AFMEntitlements.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D692E45DB6D00CDC79C /* AFMEntitlements.swift */; };
+		36984D6A2E45DB6D00CDC79C /* AFMEntitlements.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D692E45DB6D00CDC79C /* AFMEntitlements.swift */; };
 		36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = 36D70A042DF9482B006889A7 /* appclip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -47,14 +53,12 @@
 /* Begin PBXCopyFilesBuildPhase section */
 		36D70A152DF9482C006889A7 /* Embed App Clips */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
 			dstPath = "$(CONTENTS_FOLDER_PATH)/AppClips";
-			dstSubfolderSpec = 16;
+			dstSubfolder = Product;
 			files = (
 				36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */,
 			);
 			name = "Embed App Clips";
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
@@ -67,6 +71,9 @@
 		3658A65D2DF9EE1A00254350 /* ChatManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatManager.swift; sourceTree = "<group>"; };
 		36984D5B2E45DB6A00CDC79C /* AFMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMClient.swift; sourceTree = "<group>"; };
 		36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMTypes.swift; sourceTree = "<group>"; };
+		36984D632E45DB6B00CDC79C /* AFMConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMConfiguration.swift; sourceTree = "<group>"; };
+		36984D662E45DB6C00CDC79C /* AFMModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMModelCatalog.swift; sourceTree = "<group>"; };
+		36984D692E45DB6D00CDC79C /* AFMEntitlements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMEntitlements.swift; sourceTree = "<group>"; };
 		36A7A3FC2DF923BC00B52461 /* afm-chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "afm-chat.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptTool.swift; sourceTree = "<group>"; };
 		36D70A042DF9482B006889A7 /* appclip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = appclip.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -113,19 +120,15 @@
 /* Begin PBXFrameworksBuildPhase section */
 		36A7A3F92DF923BC00B52461 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				3658A65C2DF9ED3E00254350 /* MarkdownUI in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		36D70A012DF9482B006889A7 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				3658A6612DF9F04E00254350 /* MarkdownUI in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -159,6 +162,9 @@
 			isa = PBXGroup;
 			children = (
 				36984D5B2E45DB6A00CDC79C /* AFMClient.swift */,
+				36984D632E45DB6B00CDC79C /* AFMConfiguration.swift */,
+				36984D692E45DB6D00CDC79C /* AFMEntitlements.swift */,
+				36984D662E45DB6C00CDC79C /* AFMModelCatalog.swift */,
 				36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */,
 			);
 			path = LLM;
@@ -221,8 +227,6 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			fileSystemSynchronizedGroups = (
 				36D70A052DF9482B006889A7 /* appclip */,
 			);
@@ -264,7 +268,7 @@
 			packageReferences = (
 				3658A65A2DF9ED3E00254350 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 			);
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 100;
 			productRefGroup = 36A7A3FD2DF923BC00B52461 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -278,26 +282,24 @@
 /* Begin PBXResourcesBuildPhase section */
 		36A7A3FA2DF923BC00B52461 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		36D70A022DF9482B006889A7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		36A7A3F82DF923BC00B52461 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				36984D5E2E45DB6A00CDC79C /* AFMClient.swift in Sources */,
+				36984D622E45DB6B00CDC79C /* AFMConfiguration.swift in Sources */,
+				36984D682E45DB6D00CDC79C /* AFMEntitlements.swift in Sources */,
+				36984D652E45DB6C00CDC79C /* AFMModelCatalog.swift in Sources */,
 				36984D5F2E45DB6A00CDC79C /* LLMTypes.swift in Sources */,
 				3658A6232DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				3658A6242DF9E89C00254350 /* ChatModels.swift in Sources */,
@@ -309,13 +311,14 @@
 				36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
 				3658A65E2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		36D70A002DF9482B006889A7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				36984D602E45DB6A00CDC79C /* AFMClient.swift in Sources */,
+				36984D642E45DB6B00CDC79C /* AFMConfiguration.swift in Sources */,
+				36984D6A2E45DB6D00CDC79C /* AFMEntitlements.swift in Sources */,
+				36984D672E45DB6C00CDC79C /* AFMModelCatalog.swift in Sources */,
 				36984D612E45DB6A00CDC79C /* LLMTypes.swift in Sources */,
 				3658A6282DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */,
@@ -327,7 +330,6 @@
 				36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
 				3658A65F2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
@@ -340,7 +342,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		36A7A41B2DF923BE00B52461 /* Debug */ = {
+		36A7A41B2DF923BE00B52461 /* Debug configuration for PBXProject "afm-chat" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -405,7 +407,7 @@
 			};
 			name = Debug;
 		};
-		36A7A41C2DF923BE00B52461 /* Release */ = {
+		36A7A41C2DF923BE00B52461 /* Release configuration for PBXProject "afm-chat" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -463,15 +465,18 @@
 			};
 			name = Release;
 		};
-		36A7A41E2DF923BE00B52461 /* Debug */ = {
+		36A7A41E2DF923BE00B52461 /* Debug configuration for PBXNativeTarget "afm-chat" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "afm-chat/afm-chat.entitlements";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = V4MZKCA3P6;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = V4MZKCA3P6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "afm-chat/Info.plist";
@@ -491,6 +496,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "afm 3";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -503,15 +509,16 @@
 			};
 			name = Debug;
 		};
-		36A7A41F2DF923BE00B52461 /* Release */ = {
+		36A7A41F2DF923BE00B52461 /* Release configuration for PBXNativeTarget "afm-chat" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "afm-chat/afm-chat.entitlements";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = V4MZKCA3P6;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "afm-chat/Info.plist";
@@ -531,6 +538,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -543,7 +551,7 @@
 			};
 			name = Release;
 		};
-		36D70A132DF9482C006889A7 /* Debug */ = {
+		36D70A132DF9482C006889A7 /* Debug configuration for PBXNativeTarget "appclip" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -578,12 +586,13 @@
 			};
 			name = Debug;
 		};
-		36D70A142DF9482C006889A7 /* Release */ = {
+		36D70A142DF9482C006889A7 /* Release configuration for PBXNativeTarget "appclip" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = appclip/appclip.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = V4MZKCA3P6;
@@ -604,6 +613,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat.Clip;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -619,28 +629,25 @@
 		36A7A3F72DF923BC00B52461 /* Build configuration list for PBXProject "afm-chat" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				36A7A41B2DF923BE00B52461 /* Debug */,
-				36A7A41C2DF923BE00B52461 /* Release */,
+				36A7A41B2DF923BE00B52461 /* Debug configuration for PBXProject "afm-chat" */,
+				36A7A41C2DF923BE00B52461 /* Release configuration for PBXProject "afm-chat" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		36A7A41D2DF923BE00B52461 /* Build configuration list for PBXNativeTarget "afm-chat" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				36A7A41E2DF923BE00B52461 /* Debug */,
-				36A7A41F2DF923BE00B52461 /* Release */,
+				36A7A41E2DF923BE00B52461 /* Debug configuration for PBXNativeTarget "afm-chat" */,
+				36A7A41F2DF923BE00B52461 /* Release configuration for PBXNativeTarget "afm-chat" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		36D70A122DF9482C006889A7 /* Build configuration list for PBXNativeTarget "appclip" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				36D70A132DF9482C006889A7 /* Debug */,
-				36D70A142DF9482C006889A7 /* Release */,
+				36D70A132DF9482C006889A7 /* Debug configuration for PBXNativeTarget "appclip" */,
+				36D70A142DF9482C006889A7 /* Release configuration for PBXNativeTarget "appclip" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

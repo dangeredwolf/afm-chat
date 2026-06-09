@@ -55,6 +55,9 @@ struct ChatView: View {
                             ForEach(chatManager.currentMessages) { message in
                                 ChatBubble(
                                     message: message,
+                                    isStreaming: chatManager.isLoading
+                                        && !message.isUser
+                                        && message.id == chatManager.currentMessages.last(where: { !$0.isUser })?.id,
                                     onEdit: { messageId in
                                         chatManager.editMessage(messageId)
                                         isInputFocused = true

@@ -2,9 +2,83 @@ import Foundation
 
 // Provider-agnostic LLM abstractions
 
+public enum LLMReasoningLevel: String, Codable, CaseIterable, Identifiable, Sendable {
+    case light
+    case moderate
+    case deep
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .light: return "Light"
+        case .moderate: return "Moderate"
+        case .deep: return "Deep"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .light: return "Quick responses with minimal analysis"
+        case .moderate: return "Balanced thinking and response speed"
+        case .deep: return "More thorough analysis before responding"
+        }
+    }
+}
+
+public enum LLMModelChoice: String, Codable, CaseIterable, Identifiable, Sendable {
+    case onDevice
+    case privateCloudCompute
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .onDevice: return "On-Device"
+        case .privateCloudCompute: return "Private Cloud Compute"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .onDevice:
+            return "Runs locally on your device. Fast and private, with a smaller context window."
+        case .privateCloudCompute:
+            return "Uses Apple's Private Cloud Compute for stronger reasoning and a larger context window."
+        }
+    }
+}
+
+public struct LLMModelOption: Identifiable, Sendable {
+    public let choice: LLMModelChoice
+    public let isAvailable: Bool
+    public let supportsReasoning: Bool
+    public let unavailabilityNote: String?
+
+    public var id: String { choice.id }
+    public var displayName: String { choice.displayName }
+    public var description: String { choice.description }
+}
+
+public struct LLMSessionConfiguration: Sendable {
+    public var model: LLMModelChoice
+    public var temperature: Double
+    public var reasoningLevel: LLMReasoningLevel
+
+    public init(
+        model: LLMModelChoice = .onDevice,
+        temperature: Double = 1.0,
+        reasoningLevel: LLMReasoningLevel = .moderate
+    ) {
+        self.model = model
+        self.temperature = temperature
+        self.reasoningLevel = reasoningLevel
+    }
+}
+
 public protocol LLMClient {
     var availability: LLMAvailability { get }
-    func createSession(instructions: String, tools: [LLMTool]) -> LLMSession
+    func createSession(instructions: String, tools: [LLMTool], configuration: LLMSessionConfiguration) -> LLMSession
 }
 
 public protocol LLMSession {
@@ -64,6 +138,7 @@ public struct LLMToolCallEvent: Codable, Identifiable {
 public enum LLMStreamEvent {
     case contentUpdated(fullText: String)
     case toolCallsUpdated(calls: [LLMToolCallEvent])
+    case reasoningUpdated(content: String?, tokenCount: Int)
 }
 
 public enum LLMAvailability: Equatable {

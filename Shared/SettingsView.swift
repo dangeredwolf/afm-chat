@@ -10,8 +10,9 @@ import SwiftUI
 struct SettingsView: View {
     @Binding var systemPrompt: String
     @Binding var temperature: Double
+    @Binding var model: LLMModelChoice
+    @Binding var reasoningLevel: LLMReasoningLevel
     @Binding var toolsEnabled: Bool
-    // Per-tool bindings (parent)
     @Binding var toolCodeInterpreterEnabled: Bool
     @Binding var toolWebFetchEnabled: Bool
     @Binding var toolWebSearchEnabled: Bool
@@ -19,15 +20,28 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var tempPrompt: String = ""
     @State private var tempTemperature: Double = 1.0
+    @State private var tempModel: LLMModelChoice = .onDevice
+    @State private var tempReasoningLevel: LLMReasoningLevel = .moderate
     @State private var tempToolsEnabled: Bool = true
-    // Temp per-tool states used within the sheet until Save
     @State private var tempToolCodeInterpreterEnabled: Bool = true
     @State private var tempToolWebFetchEnabled: Bool = true
     @State private var tempToolWebSearchEnabled: Bool = true
     let onSave: () -> Void
-    
+
     private let defaultPrompt = "You are a helpful assistant."
-    
+
+    private var modelOptions: [LLMModelOption] {
+        AFMModelCatalog.modelOptions()
+    }
+
+    private var selectedModelOption: LLMModelOption? {
+        modelOptions.first { $0.choice == tempModel }
+    }
+
+    private var supportsReasoningForSelectedModel: Bool {
+        AFMModelCatalog.supportsReasoning(tempModel)
+    }
+
     var body: some View {
         NavigationView {
             Form {
@@ -35,7 +49,7 @@ struct SettingsView: View {
                     Text("Customize how the language model behaves by modifying the system prompt below:")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     TextEditor(text: $tempPrompt)
                         .frame(minHeight: 120)
                         .overlay(
@@ -44,7 +58,7 @@ struct SettingsView: View {
                         )
                         .disabled(!canEditToolsAndPrompt)
                         .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
-                    
+
                     Button("Reset to Default") {
                         tempPrompt = defaultPrompt
                     }
@@ -52,12 +66,40 @@ struct SettingsView: View {
                     .disabled(!canEditToolsAndPrompt)
                     .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
                 }
-                
+
+                Section(header: Text("Model")) {
+                    Text("Choose which Apple Intelligence model powers this chat.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Picker("Model", selection: $tempModel) {
+                        ForEach(modelOptions) { option in
+                            Text(option.displayName).tag(option.choice)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(!canEditToolsAndPrompt)
+                    .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+
+                    if let selectedModelOption {
+                        Text(selectedModelOption.description)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        if !selectedModelOption.isAvailable,
+                           let note = selectedModelOption.unavailabilityNote {
+                            Text(note)
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+
                 Section(header: Text("Temperature")) {
                     Text("Controls randomness in responses. Lower values (0.0) make responses more focused and deterministic, while higher values (2.0) make them more creative and varied.")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Temperature: \(tempTemperature, specifier: "%.1f")")
@@ -65,7 +107,7 @@ struct SettingsView: View {
                                 .fontWeight(.medium)
                             Spacer()
                         }
-                        
+
                         Slider(value: $tempTemperature, in: 0.0...2.0, step: 0.1) {
                             Text("Temperature")
                         } minimumValueLabel: {
@@ -80,18 +122,37 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                
+
+                if supportsReasoningForSelectedModel {
+                    Section(header: Text("Reasoning Level")) {
+                        Text("Controls how much the model thinks before responding. Light is fastest; Deep allows more analysis.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Picker("Reasoning Level", selection: $tempReasoningLevel) {
+                            ForEach(LLMReasoningLevel.allCases) { level in
+                                Text(level.displayName).tag(level)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Text(tempReasoningLevel.description)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
                 Section(header: Text("Tools")) {
-                    Text("The language model can use tools to enable more advanced functionality such as executing code or retrieving information from your device and the internet. Note: With tools enabled, the model might be less willing to answer general questions without using tools.")
+                    Text("Grant the language model additional tools such as internet access and code execution.")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
-                    Toggle("Enable Tools (Experimental)", isOn: $tempToolsEnabled)
+
+                    Toggle("Enable Tools", isOn: $tempToolsEnabled)
                         .toggleStyle(SwitchToggleStyle())
                         .padding(.vertical, 6)
                         .disabled(!canEditToolsAndPrompt)
                         .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
-                    
+
                     if tempToolsEnabled {
                         Toggle(isOn: $tempToolCodeInterpreterEnabled) {
                             HStack {
@@ -133,11 +194,13 @@ struct SettingsView: View {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         systemPrompt = tempPrompt
                         temperature = tempTemperature
+                        model = tempModel
+                        reasoningLevel = tempReasoningLevel
                         toolsEnabled = tempToolsEnabled
                         toolCodeInterpreterEnabled = tempToolCodeInterpreterEnabled
                         toolWebFetchEnabled = tempToolWebFetchEnabled
@@ -145,13 +208,18 @@ struct SettingsView: View {
                         onSave()
                         dismiss()
                     }
-                    .disabled(tempPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        tempPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || !(selectedModelOption?.isAvailable ?? false)
+                    )
                 }
             }
         }
         .onAppear {
             tempPrompt = systemPrompt
             tempTemperature = temperature
+            tempModel = model
+            tempReasoningLevel = reasoningLevel
             tempToolsEnabled = toolsEnabled
             tempToolCodeInterpreterEnabled = toolCodeInterpreterEnabled
             tempToolWebFetchEnabled = toolWebFetchEnabled
@@ -164,7 +232,7 @@ struct PromptPresetButton: View {
     let title: String
     let prompt: String
     @Binding var tempPrompt: String
-    
+
     var body: some View {
         Button(action: {
             tempPrompt = prompt
@@ -180,4 +248,4 @@ struct PromptPresetButton: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
-} 
+}

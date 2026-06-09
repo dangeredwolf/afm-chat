@@ -58,7 +58,8 @@ class ChatManager: ObservableObject {
             
             Respond with only the title in the same language as the original message, no additional text or punctuation.
             """,
-            tools: []
+            tools: [],
+            configuration: LLMSessionConfiguration(model: .onDevice, temperature: 0.7, reasoningLevel: .light)
         )
     }()
     
@@ -68,7 +69,8 @@ class ChatManager: ObservableObject {
             // Fallback session if no chat is selected
             return LLMProviderManager.shared.client.createSession(
                 instructions: "You are a helpful assistant.",
-                tools: []
+                tools: [],
+                configuration: LLMSessionConfiguration()
             )
         }
         
@@ -127,7 +129,12 @@ class ChatManager: ObservableObject {
         // Create session with transcript rehydration (transcript disabled for now)
         return LLMProviderManager.shared.client.createSession(
             instructions: systemPrompt,
-            tools: toolList
+            tools: toolList,
+            configuration: LLMSessionConfiguration(
+                model: chat?.model ?? .onDevice,
+                temperature: chat?.temperature ?? 1.0,
+                reasoningLevel: chat?.reasoningLevel ?? .moderate
+            )
         )
     }
     
@@ -208,6 +215,14 @@ class ChatManager: ObservableObject {
     var currentTemperature: Double {
         return currentChat?.temperature ?? 1.0
     }
+
+    var currentReasoningLevel: LLMReasoningLevel {
+        return currentChat?.reasoningLevel ?? .moderate
+    }
+
+    var currentModel: LLMModelChoice {
+        return currentChat?.model ?? .onDevice
+    }
     
     var currentToolsEnabled: Bool {
         return currentChat?.toolsEnabled ?? false
@@ -221,10 +236,21 @@ class ChatManager: ObservableObject {
         // Sessions will be created per-chat as needed
     }
     
+    private func resolvedDefaultModel() -> LLMModelChoice {
+        let stored = LLMModelChoice(
+            rawValue: UserDefaults.standard.string(forKey: "model") ?? LLMModelChoice.onDevice.rawValue
+        ) ?? .onDevice
+        return AFMModelCatalog.isModelAvailable(stored) ? stored : .onDevice
+    }
+
     func createNewChat() -> UUID {
         // Get default settings from UserDefaults or use defaults
         let defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
         let defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
+        let defaultModel = resolvedDefaultModel()
+        let defaultReasoningLevel = LLMReasoningLevel(
+            rawValue: UserDefaults.standard.string(forKey: "reasoningLevel") ?? LLMReasoningLevel.moderate.rawValue
+        ) ?? .moderate
         let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
         let codeEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
         let webFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
@@ -232,6 +258,8 @@ class ChatManager: ObservableObject {
 
         let newChat = Chat(systemPrompt: defaultPrompt,
                            temperature: defaultTemperature,
+                           model: defaultModel,
+                           reasoningLevel: defaultReasoningLevel,
                            toolsEnabled: defaultToolsEnabled,
                            toolCodeInterpreterEnabled: codeEnabled,
                            toolWebFetchEnabled: webFetchEnabled,
@@ -276,10 +304,19 @@ class ChatManager: ObservableObject {
         saveChats()
     }
     
-    func updateChatSettings(systemPrompt: String, temperature: Double, toolsEnabled: Bool, perTools: (code: Bool, webFetch: Bool, webSearch: Bool)? = nil) {
+    func updateChatSettings(
+        systemPrompt: String,
+        temperature: Double,
+        model: LLMModelChoice,
+        reasoningLevel: LLMReasoningLevel,
+        toolsEnabled: Bool,
+        perTools: (code: Bool, webFetch: Bool, webSearch: Bool)? = nil
+    ) {
         guard var chat = currentChat else { return }
         chat.systemPrompt = systemPrompt
         chat.temperature = temperature
+        chat.model = model
+        chat.reasoningLevel = reasoningLevel
         chat.toolsEnabled = toolsEnabled
         if let perTools = perTools {
             chat.toolCodeInterpreterEnabled = perTools.code
@@ -294,6 +331,8 @@ class ChatManager: ObservableObject {
         // Also save as defaults
         UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
         UserDefaults.standard.set(temperature, forKey: "temperature")
+        UserDefaults.standard.set(model.rawValue, forKey: "model")
+        UserDefaults.standard.set(reasoningLevel.rawValue, forKey: "reasoningLevel")
         UserDefaults.standard.set(toolsEnabled, forKey: "toolsEnabled")
         if let perTools = perTools {
             UserDefaults.standard.set(perTools.code, forKey: "toolCodeInterpreterEnabled")
@@ -610,7 +649,9 @@ class ChatManager: ObservableObject {
     private func processLLMResponse(userMessage: String, chat: Chat) async {
         var lastToolCalls: [ToolCallInfo] = []
         var hasSeenToolCalls = false
-        
+        var latestReasoning: String?
+        var latestReasoningTokenCount: Int?
+
         do {
             let responseStream = currentSession.streamResponse(to: userMessage, temperature: chat.temperature)
             var latestText = ""
@@ -619,19 +660,14 @@ class ChatManager: ObservableObject {
                     switch event {
                     case .contentUpdated(let fullText):
                         latestText = fullText
-                        if var currentChat = self.currentChat {
-                            if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                                currentChat.messages[lastIndex] = ChatMessage(
-                                    content: latestText,
-                                    isUser: false,
-                                    toolCalls: hasSeenToolCalls ? lastToolCalls : []
-                                )
-                                self.currentChat = currentChat
-                            }
-                        }
+                        self.updateInFlightAssistantMessage(
+                            content: latestText,
+                            toolCalls: hasSeenToolCalls ? lastToolCalls : [],
+                            reasoningContent: latestReasoning,
+                            reasoningTokenCount: latestReasoningTokenCount
+                        )
                     case .toolCallsUpdated(let calls):
                         hasSeenToolCalls = true
-                        // Map LLMToolCallEvent to ToolCallInfo for UI persistence
                         lastToolCalls = calls.map { call in
                             var status: ToolCallStatus
                             switch call.status {
@@ -649,16 +685,21 @@ class ChatManager: ObservableObject {
                                 error: call.error
                             )
                         }
-                        if var currentChat = self.currentChat {
-                            if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                                currentChat.messages[lastIndex] = ChatMessage(
-                                    content: latestText,
-                                    isUser: false,
-                                    toolCalls: lastToolCalls
-                                )
-                                self.currentChat = currentChat
-                            }
-                        }
+                        self.updateInFlightAssistantMessage(
+                            content: latestText,
+                            toolCalls: lastToolCalls,
+                            reasoningContent: latestReasoning,
+                            reasoningTokenCount: latestReasoningTokenCount
+                        )
+                    case .reasoningUpdated(let content, let tokenCount):
+                        latestReasoning = content
+                        latestReasoningTokenCount = tokenCount > 0 ? tokenCount : latestReasoningTokenCount
+                        self.updateInFlightAssistantMessage(
+                            content: latestText,
+                            toolCalls: hasSeenToolCalls ? lastToolCalls : [],
+                            reasoningContent: content,
+                            reasoningTokenCount: latestReasoningTokenCount
+                        )
                     }
                 }
             }
@@ -694,7 +735,25 @@ class ChatManager: ObservableObject {
             }
         }
     }
-    
+
+    private func updateInFlightAssistantMessage(
+        content: String,
+        toolCalls: [ToolCallInfo],
+        reasoningContent: String?,
+        reasoningTokenCount: Int? = nil
+    ) {
+        guard var currentChat = currentChat else { return }
+        guard let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) else { return }
+        currentChat.messages[lastIndex] = ChatMessage(
+            content: content,
+            isUser: false,
+            toolCalls: toolCalls,
+            reasoningContent: reasoningContent,
+            reasoningTokenCount: reasoningTokenCount
+        )
+        self.currentChat = currentChat
+    }
+
     // Get tool description for a given tool name
     private func getToolDescription(for toolName: String) -> String {
         switch toolName {
