@@ -114,9 +114,6 @@ class ChatManager: ObservableObject {
             if chat?.toolCodeInterpreterEnabled ?? true {
                 toolList.append(AnyLLMTool(name: "Code Interpreter", description: "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc.", providerPayloads: ["afmTool": JavaScriptTool()]))
             }
-            if chat?.toolLocationEnabled ?? true {
-                toolList.append(AnyLLMTool(name: "Location", description: "Get the user's current location, coarse or precise. The user will be able to accept or deny your request, so you do not need to ask for permission.", providerPayloads: ["afmTool": LocationTool()]))
-            }
             if chat?.toolWebFetchEnabled ?? true {
                 toolList.append(AnyLLMTool(name: "Web Fetch", description: "Fetch and extract content from web pages", providerPayloads: ["afmTool": WebFetchTool()]))
             }
@@ -230,7 +227,6 @@ class ChatManager: ObservableObject {
         let defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
         let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
         let codeEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
-        let locationEnabled = UserDefaults.standard.object(forKey: "toolLocationEnabled") as? Bool ?? true
         let webFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
         let webSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
 
@@ -238,7 +234,6 @@ class ChatManager: ObservableObject {
                            temperature: defaultTemperature,
                            toolsEnabled: defaultToolsEnabled,
                            toolCodeInterpreterEnabled: codeEnabled,
-                           toolLocationEnabled: locationEnabled,
                            toolWebFetchEnabled: webFetchEnabled,
                            toolWebSearchEnabled: webSearchEnabled)
         
@@ -281,14 +276,13 @@ class ChatManager: ObservableObject {
         saveChats()
     }
     
-    func updateChatSettings(systemPrompt: String, temperature: Double, toolsEnabled: Bool, perTools: (code: Bool, location: Bool, webFetch: Bool, webSearch: Bool)? = nil) {
+    func updateChatSettings(systemPrompt: String, temperature: Double, toolsEnabled: Bool, perTools: (code: Bool, webFetch: Bool, webSearch: Bool)? = nil) {
         guard var chat = currentChat else { return }
         chat.systemPrompt = systemPrompt
         chat.temperature = temperature
         chat.toolsEnabled = toolsEnabled
         if let perTools = perTools {
             chat.toolCodeInterpreterEnabled = perTools.code
-            chat.toolLocationEnabled = perTools.location
             chat.toolWebFetchEnabled = perTools.webFetch
             chat.toolWebSearchEnabled = perTools.webSearch
         }
@@ -303,7 +297,6 @@ class ChatManager: ObservableObject {
         UserDefaults.standard.set(toolsEnabled, forKey: "toolsEnabled")
         if let perTools = perTools {
             UserDefaults.standard.set(perTools.code, forKey: "toolCodeInterpreterEnabled")
-            UserDefaults.standard.set(perTools.location, forKey: "toolLocationEnabled")
             UserDefaults.standard.set(perTools.webFetch, forKey: "toolWebFetchEnabled")
             UserDefaults.standard.set(perTools.webSearch, forKey: "toolWebSearchEnabled")
         }
@@ -705,12 +698,8 @@ class ChatManager: ObservableObject {
     // Get tool description for a given tool name
     private func getToolDescription(for toolName: String) -> String {
         switch toolName {
-        case "getWeather":
-            return "Retrieve the latest weather information for a city"
         case "Code Interpreter":
             return "Execute JavaScript code and returns the result"
-        case "Location":
-            return "Get the user's current location (coarse or precise)"
         case "Web Fetch":
             return "Fetch and extract content from web pages"
         case "Web Search":

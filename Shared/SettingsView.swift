@@ -13,7 +13,6 @@ struct SettingsView: View {
     @Binding var toolsEnabled: Bool
     // Per-tool bindings (parent)
     @Binding var toolCodeInterpreterEnabled: Bool
-    @Binding var toolLocationEnabled: Bool
     @Binding var toolWebFetchEnabled: Bool
     @Binding var toolWebSearchEnabled: Bool
     let canEditToolsAndPrompt: Bool
@@ -23,7 +22,6 @@ struct SettingsView: View {
     @State private var tempToolsEnabled: Bool = true
     // Temp per-tool states used within the sheet until Save
     @State private var tempToolCodeInterpreterEnabled: Bool = true
-    @State private var tempToolLocationEnabled: Bool = true
     @State private var tempToolWebFetchEnabled: Bool = true
     @State private var tempToolWebSearchEnabled: Bool = true
     let onSave: () -> Void
@@ -105,16 +103,6 @@ struct SettingsView: View {
                         .disabled(!canEditToolsAndPrompt)
                         .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
 
-                        Toggle(isOn: $tempToolLocationEnabled) {
-                            HStack {
-                                Image(systemName: "location").foregroundColor(.green)
-                                Text("Location")
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                        .disabled(!canEditToolsAndPrompt)
-                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
-
                         Toggle(isOn: $tempToolWebFetchEnabled) {
                             HStack {
                                 Image(systemName: "safari").foregroundColor(.purple)
@@ -152,7 +140,6 @@ struct SettingsView: View {
                         temperature = tempTemperature
                         toolsEnabled = tempToolsEnabled
                         toolCodeInterpreterEnabled = tempToolCodeInterpreterEnabled
-                        toolLocationEnabled = tempToolLocationEnabled
                         toolWebFetchEnabled = tempToolWebFetchEnabled
                         toolWebSearchEnabled = tempToolWebSearchEnabled
                         onSave()
@@ -167,7 +154,6 @@ struct SettingsView: View {
             tempTemperature = temperature
             tempToolsEnabled = toolsEnabled
             tempToolCodeInterpreterEnabled = toolCodeInterpreterEnabled
-            tempToolLocationEnabled = toolLocationEnabled
             tempToolWebFetchEnabled = toolWebFetchEnabled
             tempToolWebSearchEnabled = toolWebSearchEnabled
         }

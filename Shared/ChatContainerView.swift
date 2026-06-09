@@ -204,7 +204,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
                                     webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
@@ -220,7 +219,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
                                     webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
@@ -236,7 +234,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: newToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
                                     webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
@@ -251,25 +248,8 @@ struct ChatDetailView: View {
                                 temperature: chatManager.currentTemperature,
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
-                                    code: newValue,
-                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
-                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
-                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
-                                )
-                            )
-                        }
-                    ),
-                    toolLocationEnabled: Binding(
-                        get: { chatManager.currentChat?.toolLocationEnabled ?? true },
-                        set: { newValue in
-                            chatManager.updateChatSettings(
-                                systemPrompt: chatManager.currentSystemPrompt,
-                                temperature: chatManager.currentTemperature,
-                                toolsEnabled: chatManager.currentToolsEnabled,
-                                perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    location: newValue,
-                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
+                                    webFetch: newValue,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
                             )
@@ -284,7 +264,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
                                     webFetch: newValue,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
@@ -300,7 +279,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    location: chatManager.currentChat?.toolLocationEnabled ?? true,
                                     webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: newValue
                                 )
@@ -336,7 +314,6 @@ struct GlobalSettingsView: View {
     @State private var defaultTemperature: Double = 1.0
     @State private var defaultToolsEnabled: Bool = true
     @State private var defaultToolCodeInterpreterEnabled: Bool = true
-    @State private var defaultToolLocationEnabled: Bool = true
     @State private var defaultToolWebFetchEnabled: Bool = true
     @State private var defaultToolWebSearchEnabled: Bool = true
     
@@ -382,13 +359,6 @@ struct GlobalSettingsView: View {
                             }
                         }
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                        Toggle(isOn: $defaultToolLocationEnabled) {
-                            HStack {
-                                Image(systemName: "location").foregroundColor(.green)
-                                Text("Location")
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                         Toggle(isOn: $defaultToolWebFetchEnabled) {
                             HStack {
                                 Image(systemName: "safari").foregroundColor(.purple)
@@ -421,7 +391,6 @@ struct GlobalSettingsView: View {
                         UserDefaults.standard.set(defaultTemperature, forKey: "temperature")
                         UserDefaults.standard.set(defaultToolsEnabled, forKey: "toolsEnabled")
                         UserDefaults.standard.set(defaultToolCodeInterpreterEnabled, forKey: "toolCodeInterpreterEnabled")
-                        UserDefaults.standard.set(defaultToolLocationEnabled, forKey: "toolLocationEnabled")
                         UserDefaults.standard.set(defaultToolWebFetchEnabled, forKey: "toolWebFetchEnabled")
                         UserDefaults.standard.set(defaultToolWebSearchEnabled, forKey: "toolWebSearchEnabled")
                         dismiss()
@@ -434,7 +403,6 @@ struct GlobalSettingsView: View {
             defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
             defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
             defaultToolCodeInterpreterEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
-            defaultToolLocationEnabled = UserDefaults.standard.object(forKey: "toolLocationEnabled") as? Bool ?? true
             defaultToolWebFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
             defaultToolWebSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
         }

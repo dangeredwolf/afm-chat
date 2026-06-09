@@ -94,7 +94,7 @@ enum ChatError: Identifiable, Codable {
             return .assetsUnavailable(errorDescription)
         }
         // Tool-related errors
-        if errorDescription.contains("tool:") || errorDescription.contains("Tool ") || errorDescription.contains("WeatherTool") {
+        if errorDescription.contains("tool:") || errorDescription.contains("Tool ") {
             return .unknownError("Tool execution failed: \(errorDescription)")
         }
         return .unknownError(errorDescription)
@@ -221,7 +221,6 @@ struct Chat: Identifiable, Codable {
     var toolsEnabled: Bool
     // Per-tool enablement (effective only when toolsEnabled == true)
     var toolCodeInterpreterEnabled: Bool
-    var toolLocationEnabled: Bool
     var toolWebFetchEnabled: Bool
     var toolWebSearchEnabled: Bool
     
@@ -230,7 +229,6 @@ struct Chat: Identifiable, Codable {
          temperature: Double = 1.0,
          toolsEnabled: Bool = true,
          toolCodeInterpreterEnabled: Bool = true,
-         toolLocationEnabled: Bool = true,
          toolWebFetchEnabled: Bool = true,
          toolWebSearchEnabled: Bool = true) {
         self.id = UUID()
@@ -241,7 +239,6 @@ struct Chat: Identifiable, Codable {
         self.temperature = temperature
         self.toolsEnabled = toolsEnabled
         self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
-        self.toolLocationEnabled = toolLocationEnabled
         self.toolWebFetchEnabled = toolWebFetchEnabled
         self.toolWebSearchEnabled = toolWebSearchEnabled
     }
@@ -273,7 +270,7 @@ struct Chat: Identifiable, Codable {
         self.temperature = try container.decode(Double.self, forKey: .temperature)
         self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false
         self.toolCodeInterpreterEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolCodeInterpreterEnabled) ?? true
-        self.toolLocationEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolLocationEnabled) ?? true
+        _ = try container.decodeIfPresent(Bool.self, forKey: .toolLocationEnabled)
         self.toolWebFetchEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolWebFetchEnabled) ?? true
         self.toolWebSearchEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolWebSearchEnabled) ?? true
     }
@@ -288,7 +285,6 @@ struct Chat: Identifiable, Codable {
         try container.encode(temperature, forKey: .temperature)
         try container.encode(toolsEnabled, forKey: .toolsEnabled)
         try container.encode(toolCodeInterpreterEnabled, forKey: .toolCodeInterpreterEnabled)
-        try container.encode(toolLocationEnabled, forKey: .toolLocationEnabled)
         try container.encode(toolWebFetchEnabled, forKey: .toolWebFetchEnabled)
         try container.encode(toolWebSearchEnabled, forKey: .toolWebSearchEnabled)
     }

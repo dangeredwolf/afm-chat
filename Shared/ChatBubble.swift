@@ -186,7 +186,6 @@ struct ToolCallView: View {
     
     private func displayNameForTool(_ toolName: String) -> String {
         switch toolName.lowercased() {
-        case "getweather": return "Weather"
         case "websearch": return "Web Search"
         case "calculator": return "Calculator"
         default: return toolName.capitalized
