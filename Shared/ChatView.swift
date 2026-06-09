@@ -41,6 +41,16 @@ struct ChatView: View {
                                         .fontWeight(.semibold)
                                         .foregroundColor(.secondary)
                                     
+                                    Text("Model: \(chatManager.currentModel.displayName)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+
+                                    if AFMModelCatalog.supportsReasoning(chatManager.currentModel) {
+                                        Text("Reasoning: \(chatManager.currentReasoningLevel.displayName)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
                                     Text("Temperature: \(chatManager.currentTemperature, specifier: "%.1f")")
                                         .font(.caption)
                                         .foregroundColor(.secondary)

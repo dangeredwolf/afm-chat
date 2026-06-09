@@ -339,231 +339,146 @@ struct ChatBubble: View {
         self.onRetry = onRetry
     }
     
+    private var maxBubbleWidth: CGFloat {
+        UIScreen.main.bounds.width * 0.75
+    }
+
+    private var hasBubbleContent: Bool {
+        message.isUser
+            || message.isError
+            || !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    @ViewBuilder
+    private var bubbleContent: some View {
+        if message.isUser {
+            Text(message.content)
+        } else if message.isError, let error = message.error {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: error.systemIcon)
+                        .foregroundColor(.red)
+                    Text(error.title)
+                        .font(.headline)
+                        .foregroundColor(.red)
+                    Spacer()
+                }
+
+                Text(error.description)
+                    .font(.body)
+                    .foregroundColor(.primary)
+
+                if error.isRecoverable {
+                    HStack {
+                        Button(action: {
+                            onRetry?(message.id)
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.clockwise")
+                                Text("Try Again")
+                            }
+                            .font(.caption)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.blue.opacity(0.1))
+                            .foregroundColor(.blue)
+                            .cornerRadius(8)
+                        }
+                        Spacer()
+                    }
+                }
+            }
+        } else {
+            let contentParts = message.content.components(separatedBy: "\n\n")
+            ForEach(Array(contentParts.enumerated()), id: \.offset) { _, part in
+                if !part.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Markdown(part)
+                        .markdownTextStyle(\.text) {
+                            ForegroundColor(.primary)
+                        }
+                        .markdownTextStyle(\.code) {
+                            FontFamilyVariant(.monospaced)
+                            FontSize(.em(0.85))
+                            ForegroundColor(.primary)
+                            BackgroundColor(.primary.opacity(0.1))
+                        }
+                }
+            }
+        }
+    }
+
     var body: some View {
         HStack {
             if message.isUser {
                 Spacer()
             }
-            
-            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
-                Group {
-                    if message.isUser {
-                        // User messages: plain text
-                        Text(message.content)
-                    } else if message.isError, let error = message.error {
-                        // Error messages: special error UI
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: error.systemIcon)
-                                    .foregroundColor(.red)
-                                Text(error.title)
-                                    .font(.headline)
-                                    .foregroundColor(.red)
-                                Spacer()
-                            }
-                            
-                            Text(error.description)
-                                .font(.body)
-                                .foregroundColor(.primary)
-                            
-                            // Retry button for recoverable errors
-                            if error.isRecoverable {
-                                HStack {
-                                    Button(action: {
-                                        onRetry?(message.id)
-                                    }) {
-                                        HStack {
-                                            Image(systemName: "arrow.clockwise")
-                                            Text("Try Again")
-                                        }
-                                        .font(.caption)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue.opacity(0.1))
-                                        .foregroundColor(.blue)
-                                        .cornerRadius(8)
-                                    }
-                                    Spacer()
-                                }
-                            }
-                        }
-                    } else {
-                        // AI messages: rendered markdown with inline tool calls
-                        VStack(alignment: .leading, spacing: 8) {
-                            if message.hasReasoningContent {
-                                ReasoningView(
-                                    reasoningContent: message.reasoningContent,
-                                    reasoningTokenCount: message.reasoningTokenCount,
-                                    isStreaming: isStreaming
-                                )
-                            }
 
-                            if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                // Split content into paragraphs and try to place tool calls inline
-                                let contentParts = message.content.components(separatedBy: "\n\n")
-                                let toolCallsToDistribute = message.toolCalls
-                                
-                                // Pre-calculate which tool calls go where to avoid duplicates
-                                let toolCallPlacements = calculateToolCallPlacements(
-                                    contentParts: contentParts,
-                                    toolCalls: toolCallsToDistribute
-                                )
-                                
-                                ForEach(Array(contentParts.enumerated()), id: \.offset) { index, part in
-                                    // Show content part
-                                    if !part.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Markdown(part)
-//                                            .markdownTheme(.gitHub)
-                                            .markdownTextStyle(\.text) {
-                                                ForegroundColor(.primary)
-                                            }
-                                            .markdownTextStyle(\.code) {
-                                                FontFamilyVariant(.monospaced)
-                                                FontSize(.em(0.85))
-                                                ForegroundColor(.primary)
-                                                BackgroundColor(.primary.opacity(0.1))
-                                            }
-                                    }
-                                    
-                                    // Show tool calls assigned to this section
-                                    if let toolCallsForSection = toolCallPlacements[index], !toolCallsForSection.isEmpty {
-                                        VStack(alignment: .leading, spacing: 6) {
-                                            ForEach(toolCallsForSection) { toolCall in
-                                                ToolCallView(toolCall: toolCall)
-                                            }
-                                        }
-                                        .padding(.vertical, 4)
-                                    }
+            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 6) {
+                if !message.isUser {
+                    if message.hasReasoningContent {
+                        ReasoningView(
+                            reasoningContent: message.reasoningContent,
+                            reasoningTokenCount: message.reasoningTokenCount,
+                            isStreaming: isStreaming
+                        )
+                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+                    }
+
+                    if message.hasToolCalls {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(message.toolCalls) { toolCall in
+                                ToolCallView(toolCall: toolCall)
+                            }
+                        }
+                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+                    }
+                }
+
+                if hasBubbleContent {
+                    bubbleContent
+                        .padding(12)
+                        .background(
+                            message.isUser ? Color.indigo :
+                            message.isError ? Color.red.opacity(0.1) :
+                            Color.gray.opacity(0.2)
+                        )
+                        .foregroundColor(
+                            message.isUser ? .white :
+                            message.isError ? .primary :
+                            .primary
+                        )
+                        .cornerRadius(16)
+                        .frame(maxWidth: maxBubbleWidth, alignment: message.isUser ? .trailing : .leading)
+                        .contextMenu {
+                            Button(action: {
+                                onCopy?(message.id)
+                            }) {
+                                Label("Copy", systemImage: "doc.on.doc")
+                            }
+                            if message.isUser {
+                                Button(action: {
+                                    onEdit?(message.id)
+                                }) {
+                                    Label("Edit Message", systemImage: "pencil")
                                 }
-                            } else if message.hasToolCalls {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    ForEach(message.toolCalls) { toolCall in
-                                        ToolCallView(toolCall: toolCall)
-                                    }
+                            } else if message.isError {
+                                Button(action: {
+                                    onRetry?(message.id)
+                                }) {
+                                    Label("Retry", systemImage: "arrow.clockwise")
                                 }
                             }
                         }
-                    }
                 }
-                .padding(12)
-                .background(
-                    message.isUser ? Color.indigo :
-                    message.isError ? Color.red.opacity(0.1) :
-                    Color.gray.opacity(0.2)
-                )
-                .foregroundColor(
-                    message.isUser ? .white :
-                    message.isError ? .primary :
-                    .primary
-                )
-                .cornerRadius(16)
-                .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
-                .contextMenu {
-                    Button(action: {
-                        onCopy?(message.id)
-                    }) {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                    if message.isUser {
-                        Button(action: {
-                            onEdit?(message.id)
-                        }) {
-                            Label("Edit Message", systemImage: "pencil")
-                        }
-                    } else if message.isError {
-                        Button(action: {
-                            onRetry?(message.id)
-                        }) {
-                            Label("Retry", systemImage: "arrow.clockwise")
-                        }
-                    }
-                }
-                
+
                 Text(message.timestamp, style: .time)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
-            
+
             if !message.isUser {
                 Spacer()
             }
         }
-    }
-    
-    // Distribute tool calls across content sections based on content cues
-    private func getToolCallsForSection(
-        sectionIndex: Int,
-        totalSections: Int,
-        allToolCalls: [ToolCallInfo],
-        sectionContent: String
-    ) -> [ToolCallInfo] {
-        guard !allToolCalls.isEmpty else { return [] }
-        
-        // Debug: print section info (only for non-empty sections)
-        if !sectionContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            print("Section \(sectionIndex): '\(sectionContent.prefix(50))...'")
-        }
-        
-        // Smart strategy: place tool calls based on content cues
-        // Skip empty sections
-        guard !sectionContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return []
-        }
-        
-        // Very simple approach: place tool calls in the middle sections
-        // Avoid first and last sections, distribute evenly in between
-        if totalSections >= 3 && sectionIndex > 0 && sectionIndex < totalSections - 1 {
-            // Calculate which tool call belongs to this middle section
-            let middleSections = totalSections - 2 // Exclude first and last
-            let toolCallIndex = ((sectionIndex - 1) * allToolCalls.count) / middleSections
-            
-            if toolCallIndex < allToolCalls.count && toolCallIndex >= 0 {
-                print("Placing tool call \(toolCallIndex) after middle section \(sectionIndex)")
-                return [allToolCalls[toolCallIndex]]
-            }
-        }
-        
-        // For short conversations (1-2 sections), place all tool calls after first section
-        if totalSections <= 2 && sectionIndex == 0 {
-            print("Placing all \(allToolCalls.count) tool calls after first section in short conversation")
-            return allToolCalls
-        }
-        
-        return []
-    }
-    
-    // Pre-calculate tool call placements to avoid duplicates
-    private func calculateToolCallPlacements(
-        contentParts: [String],
-        toolCalls: [ToolCallInfo]
-    ) -> [Int: [ToolCallInfo]] {
-        var placements: [Int: [ToolCallInfo]] = [:]
-        var usedToolCalls: Set<UUID> = []
-        
-        // Go through each section and determine which tool calls should appear there
-        for (index, part) in contentParts.enumerated() {
-            let toolCallsForSection = getToolCallsForSection(
-                sectionIndex: index,
-                totalSections: contentParts.count,
-                allToolCalls: toolCalls,
-                sectionContent: part
-            )
-            
-            // Filter out already used tool calls
-            let newToolCalls = toolCallsForSection.filter { toolCall in
-                !usedToolCalls.contains(toolCall.id)
-            }
-            
-            if !newToolCalls.isEmpty {
-                placements[index] = newToolCalls
-                
-                // Mark these as used
-                for toolCall in newToolCalls {
-                    usedToolCalls.insert(toolCall.id)
-                }
-            }
-        }
-        
-        return placements
     }
 } 

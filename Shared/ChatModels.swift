@@ -281,7 +281,6 @@ struct Chat: Identifiable, Codable {
     var toolsEnabled: Bool
     // Per-tool enablement (effective only when toolsEnabled == true)
     var toolCodeInterpreterEnabled: Bool
-    var toolWebFetchEnabled: Bool
     var toolWebSearchEnabled: Bool
     
     init(title: String = "New Chat",
@@ -291,7 +290,6 @@ struct Chat: Identifiable, Codable {
          reasoningLevel: LLMReasoningLevel = .moderate,
          toolsEnabled: Bool = true,
          toolCodeInterpreterEnabled: Bool = true,
-         toolWebFetchEnabled: Bool = true,
          toolWebSearchEnabled: Bool = true) {
         self.id = UUID()
         self.title = title
@@ -303,7 +301,6 @@ struct Chat: Identifiable, Codable {
         self.reasoningLevel = reasoningLevel
         self.toolsEnabled = toolsEnabled
         self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
-        self.toolWebFetchEnabled = toolWebFetchEnabled
         self.toolWebSearchEnabled = toolWebSearchEnabled
     }
     
@@ -337,7 +334,7 @@ struct Chat: Identifiable, Codable {
         self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false
         self.toolCodeInterpreterEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolCodeInterpreterEnabled) ?? true
         _ = try container.decodeIfPresent(Bool.self, forKey: .toolLocationEnabled)
-        self.toolWebFetchEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolWebFetchEnabled) ?? true
+        _ = try container.decodeIfPresent(Bool.self, forKey: .toolWebFetchEnabled)
         self.toolWebSearchEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolWebSearchEnabled) ?? true
     }
     
@@ -353,7 +350,6 @@ struct Chat: Identifiable, Codable {
         try container.encode(reasoningLevel, forKey: .reasoningLevel)
         try container.encode(toolsEnabled, forKey: .toolsEnabled)
         try container.encode(toolCodeInterpreterEnabled, forKey: .toolCodeInterpreterEnabled)
-        try container.encode(toolWebFetchEnabled, forKey: .toolWebFetchEnabled)
         try container.encode(toolWebSearchEnabled, forKey: .toolWebSearchEnabled)
     }
     

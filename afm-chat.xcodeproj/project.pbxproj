@@ -34,8 +34,6 @@
 		36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = 36D70A042DF9482B006889A7 /* appclip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		36EC3F972E1359C0009B8F2F /* WebFetchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F962E1359C0009B8F2F /* WebFetchTool.swift */; };
-		36EC3F982E1359C0009B8F2F /* WebFetchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F962E1359C0009B8F2F /* WebFetchTool.swift */; };
 		36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F992E137295009B8F2F /* SearchTool.swift */; };
 		36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F992E137295009B8F2F /* SearchTool.swift */; };
 /* End PBXBuildFile section */
@@ -77,7 +75,6 @@
 		36A7A3FC2DF923BC00B52461 /* afm-chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "afm-chat.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptTool.swift; sourceTree = "<group>"; };
 		36D70A042DF9482B006889A7 /* appclip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = appclip.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		36EC3F962E1359C0009B8F2F /* WebFetchTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFetchTool.swift; sourceTree = "<group>"; };
 		36EC3F992E137295009B8F2F /* SearchTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchTool.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -153,7 +150,6 @@
 			children = (
 				36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */,
 				36EC3F992E137295009B8F2F /* SearchTool.swift */,
-				36EC3F962E1359C0009B8F2F /* WebFetchTool.swift */,
 			);
 			path = Tools;
 			sourceTree = "<group>";
@@ -305,7 +301,6 @@
 				3658A6242DF9E89C00254350 /* ChatModels.swift in Sources */,
 				36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */,
 				3658A6252DF9E89C00254350 /* ChatBubble.swift in Sources */,
-				36EC3F982E1359C0009B8F2F /* WebFetchTool.swift in Sources */,
 				3658A6262DF9E89C00254350 /* SettingsView.swift in Sources */,
 				3658A6272DF9E89C00254350 /* ChatView.swift in Sources */,
 				36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
@@ -322,7 +317,6 @@
 				36984D612E45DB6A00CDC79C /* LLMTypes.swift in Sources */,
 				3658A6282DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */,
-				36EC3F972E1359C0009B8F2F /* WebFetchTool.swift in Sources */,
 				3658A6292DF9E89C00254350 /* ChatModels.swift in Sources */,
 				3658A62A2DF9E89C00254350 /* ChatBubble.swift in Sources */,
 				3658A62B2DF9E89C00254350 /* SettingsView.swift in Sources */,
@@ -516,9 +510,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "afm-chat/afm-chat.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = V4MZKCA3P6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "afm-chat/Info.plist";

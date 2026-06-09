@@ -14,7 +14,6 @@ struct SettingsView: View {
     @Binding var reasoningLevel: LLMReasoningLevel
     @Binding var toolsEnabled: Bool
     @Binding var toolCodeInterpreterEnabled: Bool
-    @Binding var toolWebFetchEnabled: Bool
     @Binding var toolWebSearchEnabled: Bool
     let canEditToolsAndPrompt: Bool
     @Environment(\.dismiss) private var dismiss
@@ -24,7 +23,6 @@ struct SettingsView: View {
     @State private var tempReasoningLevel: LLMReasoningLevel = .moderate
     @State private var tempToolsEnabled: Bool = true
     @State private var tempToolCodeInterpreterEnabled: Bool = true
-    @State private var tempToolWebFetchEnabled: Bool = true
     @State private var tempToolWebSearchEnabled: Bool = true
     let onSave: () -> Void
 
@@ -164,16 +162,6 @@ struct SettingsView: View {
                         .disabled(!canEditToolsAndPrompt)
                         .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
 
-                        Toggle(isOn: $tempToolWebFetchEnabled) {
-                            HStack {
-                                Image(systemName: "safari").foregroundColor(.purple)
-                                Text("Web Fetch")
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                        .disabled(!canEditToolsAndPrompt)
-                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
-
                         Toggle(isOn: $tempToolWebSearchEnabled) {
                             HStack {
                                 Image(systemName: "magnifyingglass").foregroundColor(.orange)
@@ -203,7 +191,6 @@ struct SettingsView: View {
                         reasoningLevel = tempReasoningLevel
                         toolsEnabled = tempToolsEnabled
                         toolCodeInterpreterEnabled = tempToolCodeInterpreterEnabled
-                        toolWebFetchEnabled = tempToolWebFetchEnabled
                         toolWebSearchEnabled = tempToolWebSearchEnabled
                         onSave()
                         dismiss()
@@ -222,7 +209,6 @@ struct SettingsView: View {
             tempReasoningLevel = reasoningLevel
             tempToolsEnabled = toolsEnabled
             tempToolCodeInterpreterEnabled = toolCodeInterpreterEnabled
-            tempToolWebFetchEnabled = toolWebFetchEnabled
             tempToolWebSearchEnabled = toolWebSearchEnabled
         }
     }

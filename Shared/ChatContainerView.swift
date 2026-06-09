@@ -206,7 +206,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
                             )
@@ -223,7 +222,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
                             )
@@ -240,7 +238,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
                             )
@@ -257,7 +254,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
                             )
@@ -274,7 +270,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: newToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
                             )
@@ -290,25 +285,7 @@ struct ChatDetailView: View {
                                 reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
-                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webFetch: newValue,
-                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
-                                )
-                            )
-                        }
-                    ),
-                    toolWebFetchEnabled: Binding(
-                        get: { chatManager.currentChat?.toolWebFetchEnabled ?? true },
-                        set: { newValue in
-                            chatManager.updateChatSettings(
-                                systemPrompt: chatManager.currentSystemPrompt,
-                                temperature: chatManager.currentTemperature,
-                                model: chatManager.currentModel,
-                                reasoningLevel: chatManager.currentReasoningLevel,
-                                toolsEnabled: chatManager.currentToolsEnabled,
-                                perTools: (
-                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webFetch: newValue,
+                                    code: newValue,
                                     webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
                                 )
                             )
@@ -325,7 +302,6 @@ struct ChatDetailView: View {
                                 toolsEnabled: chatManager.currentToolsEnabled,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true,
                                     webSearch: newValue
                                 )
                             )
@@ -362,7 +338,6 @@ struct GlobalSettingsView: View {
     @State private var defaultReasoningLevel: LLMReasoningLevel = .moderate
     @State private var defaultToolsEnabled: Bool = true
     @State private var defaultToolCodeInterpreterEnabled: Bool = true
-    @State private var defaultToolWebFetchEnabled: Bool = true
     @State private var defaultToolWebSearchEnabled: Bool = true
     
     var body: some View {
@@ -452,13 +427,6 @@ struct GlobalSettingsView: View {
                             }
                         }
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                        Toggle(isOn: $defaultToolWebFetchEnabled) {
-                            HStack {
-                                Image(systemName: "safari").foregroundColor(.purple)
-                                Text("Web Fetch")
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                         Toggle(isOn: $defaultToolWebSearchEnabled) {
                             HStack {
                                 Image(systemName: "magnifyingglass").foregroundColor(.orange)
@@ -486,7 +454,6 @@ struct GlobalSettingsView: View {
                         UserDefaults.standard.set(defaultReasoningLevel.rawValue, forKey: "reasoningLevel")
                         UserDefaults.standard.set(defaultToolsEnabled, forKey: "toolsEnabled")
                         UserDefaults.standard.set(defaultToolCodeInterpreterEnabled, forKey: "toolCodeInterpreterEnabled")
-                        UserDefaults.standard.set(defaultToolWebFetchEnabled, forKey: "toolWebFetchEnabled")
                         UserDefaults.standard.set(defaultToolWebSearchEnabled, forKey: "toolWebSearchEnabled")
                         dismiss()
                     }
@@ -504,7 +471,6 @@ struct GlobalSettingsView: View {
             ) ?? .moderate
             defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
             defaultToolCodeInterpreterEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
-            defaultToolWebFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
             defaultToolWebSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
         }
     }

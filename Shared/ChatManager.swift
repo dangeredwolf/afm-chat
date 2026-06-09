@@ -116,9 +116,6 @@ class ChatManager: ObservableObject {
             if chat?.toolCodeInterpreterEnabled ?? true {
                 toolList.append(AnyLLMTool(name: "Code Interpreter", description: "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc.", providerPayloads: ["afmTool": JavaScriptTool()]))
             }
-            if chat?.toolWebFetchEnabled ?? true {
-                toolList.append(AnyLLMTool(name: "Web Fetch", description: "Fetch and extract content from web pages", providerPayloads: ["afmTool": WebFetchTool()]))
-            }
             if chat?.toolWebSearchEnabled ?? true {
                 toolList.append(AnyLLMTool(name: "Web Search", description: "Search the web for information on any topic to retrieve up-to-date information.", providerPayloads: ["afmTool": SearchTool()]))
             }
@@ -253,7 +250,6 @@ class ChatManager: ObservableObject {
         ) ?? .moderate
         let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
         let codeEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
-        let webFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
         let webSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
 
         let newChat = Chat(systemPrompt: defaultPrompt,
@@ -262,7 +258,6 @@ class ChatManager: ObservableObject {
                            reasoningLevel: defaultReasoningLevel,
                            toolsEnabled: defaultToolsEnabled,
                            toolCodeInterpreterEnabled: codeEnabled,
-                           toolWebFetchEnabled: webFetchEnabled,
                            toolWebSearchEnabled: webSearchEnabled)
         
         // Store as temporary chat (not saved until first message)
@@ -310,7 +305,7 @@ class ChatManager: ObservableObject {
         model: LLMModelChoice,
         reasoningLevel: LLMReasoningLevel,
         toolsEnabled: Bool,
-        perTools: (code: Bool, webFetch: Bool, webSearch: Bool)? = nil
+        perTools: (code: Bool, webSearch: Bool)? = nil
     ) {
         guard var chat = currentChat else { return }
         chat.systemPrompt = systemPrompt
@@ -320,7 +315,6 @@ class ChatManager: ObservableObject {
         chat.toolsEnabled = toolsEnabled
         if let perTools = perTools {
             chat.toolCodeInterpreterEnabled = perTools.code
-            chat.toolWebFetchEnabled = perTools.webFetch
             chat.toolWebSearchEnabled = perTools.webSearch
         }
         currentChat = chat
@@ -336,7 +330,6 @@ class ChatManager: ObservableObject {
         UserDefaults.standard.set(toolsEnabled, forKey: "toolsEnabled")
         if let perTools = perTools {
             UserDefaults.standard.set(perTools.code, forKey: "toolCodeInterpreterEnabled")
-            UserDefaults.standard.set(perTools.webFetch, forKey: "toolWebFetchEnabled")
             UserDefaults.standard.set(perTools.webSearch, forKey: "toolWebSearchEnabled")
         }
     }
@@ -759,8 +752,6 @@ class ChatManager: ObservableObject {
         switch toolName {
         case "Code Interpreter":
             return "Execute JavaScript code and returns the result"
-        case "Web Fetch":
-            return "Fetch and extract content from web pages"
         case "Web Search":
             return "Search the web for information on any topic"
         default:
