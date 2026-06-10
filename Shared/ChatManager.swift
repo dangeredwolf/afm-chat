@@ -21,6 +21,7 @@ class ChatManager: ObservableObject {
         }
     }
     @Published var inputText: String = ""
+    @Published var pendingAttachments: [ChatMessageAttachment] = []
     @Published var isLoading: Bool = false
     @Published var editingMessageId: UUID? = nil
     @Published var savedMessagesForEdit: [ChatMessage] = []
@@ -114,6 +115,7 @@ class ChatManager: ObservableObject {
             LLMHistoryEntry(
                 isUser: message.isUser,
                 content: message.content,
+                attachments: message.isUser ? message.attachments.map { $0.toLLMAttachment() } : [],
                 toolCalls: message.toolCalls.compactMap { toolCall in
                     guard toolCall.status == .completed || toolCall.status == .failed else { return nil }
                     return LLMHistoryToolCall(
@@ -147,7 +149,8 @@ class ChatManager: ObservableObject {
                 model: chat?.model ?? .onDevice,
                 temperature: chat?.temperature ?? 1.0,
                 reasoningLevel: chat?.reasoningLevel ?? .moderate,
-                history: history
+                history: history,
+                guardrails: .permissiveContentTransformations
             )
         )
     }
@@ -309,7 +312,7 @@ class ChatManager: ObservableObject {
         toolsEnabled: Bool,
         perTools: (code: Bool, webSearch: Bool)? = nil
     ) {
-        guard var chat = currentChat else { return }
+        guard !isLoading, var chat = currentChat else { return }
         chat.systemPrompt = systemPrompt
         chat.temperature = temperature
         chat.model = model
@@ -335,11 +338,14 @@ class ChatManager: ObservableObject {
             UserDefaults.standard.set(perTools.code, forKey: "toolCodeInterpreterEnabled")
             UserDefaults.standard.set(perTools.webSearch, forKey: "toolWebSearchEnabled")
         }
+
+        saveChats()
     }
     
     func sendMessage() {
         let userMessage = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !userMessage.isEmpty, var chat = currentChat else { return }
+        let attachmentsToSend = pendingAttachments
+        guard (!userMessage.isEmpty || !attachmentsToSend.isEmpty), var chat = currentChat else { return }
         
         // If we're editing, clear the saved messages (confirming the edit)
         if editingMessageId != nil {
@@ -352,7 +358,11 @@ class ChatManager: ObservableObject {
         }
         
         // Add user message
-        let userChatMessage = ChatMessage(content: userMessage, isUser: true)
+        let userChatMessage = ChatMessage(
+            content: userMessage,
+            isUser: true,
+            attachments: attachmentsToSend
+        )
         chat.messages.append(userChatMessage)
         
         // Generate AI title from first message if needed
@@ -361,17 +371,23 @@ class ChatManager: ObservableObject {
             chat.generateFallbackTitle()
             
             // Generate AI title in the background
-            generateAITitle(for: chat.id, userMessage: userMessage)
+            let titleSource = userMessage.isEmpty ? attachmentsToSend.first?.label ?? "Attachment" : userMessage
+            generateAITitle(for: chat.id, userMessage: titleSource)
         }
         
         // If this is a temporary chat with its first message, save it permanently
         if let tempChat = temporaryChat, tempChat.id == chat.id, chat.messages.filter({ $0.isUser }).count == 1 {
-            chats.insert(chat, at: 0) // Insert at beginning for most recent first
+            chats.append(chat)
+            sortChatsByActivity()
             temporaryChat = nil // Clear temporary chat
         }
         
         // Create placeholder AI message for streaming
-        let aiMessage = ChatMessage(content: "", isUser: false)
+        let aiMessage = ChatMessage(
+            content: "",
+            isUser: false,
+            reasoningDuration: AFMModelCatalog.supportsReasoning(chat.model) ? 0 : nil
+        )
         chat.messages.append(aiMessage)
         
         // Update the chat
@@ -382,6 +398,7 @@ class ChatManager: ObservableObject {
         
         // Clear input and editing state
         inputText = ""
+        pendingAttachments = []
         editingMessageId = nil
         isLoading = true
         
@@ -392,8 +409,78 @@ class ChatManager: ObservableObject {
         }
         
         // Send to LLM with streaming and tool call tracking
+        let llmPrompt = LLMPrompt(
+            text: userMessage,
+            attachments: attachmentsToSend.map { $0.toLLMAttachment() }
+        )
         Task {
-            await self.processLLMResponse(userMessage: userMessage, chat: chat)
+            await self.processLLMResponse(prompt: llmPrompt, chat: chat)
+        }
+    }
+
+    func removePendingAttachment(_ attachmentId: UUID) {
+        pendingAttachments.removeAll { $0.id == attachmentId }
+    }
+
+    @MainActor
+    func addPendingAttachment(from sourceURL: URL, label: String, kind: ChatMessageAttachmentKind) {
+        guard let chatId = currentChatId else { return }
+        do {
+            let storedURL = try ChatAttachments.importFile(from: sourceURL, chatId: chatId, suggestedName: label)
+            let attachment = ChatMessageAttachment(fileURL: storedURL, chatId: chatId, label: label, kind: kind)
+            pendingAttachments.append(attachment)
+        } catch {
+            print("Failed to import attachment: \(error)")
+        }
+    }
+
+    @MainActor
+    func addPendingImageAttachment(_ image: UIImage, label: String) {
+        guard let chatId = currentChatId else { return }
+        guard let data = image.jpegData(compressionQuality: 0.9) else { return }
+        do {
+            let storedURL = try ChatAttachments.saveData(
+                data,
+                chatId: chatId,
+                suggestedName: label,
+                fileExtension: "jpg"
+            )
+            let attachment = ChatMessageAttachment(
+                fileURL: storedURL,
+                chatId: chatId,
+                label: label,
+                kind: .image
+            )
+            pendingAttachments.append(attachment)
+        } catch {
+            print("Failed to save image attachment: \(error)")
+        }
+    }
+
+    @MainActor
+    func addPendingDataAttachment(_ data: Data, label: String) {
+        if let image = UIImage(data: data) {
+            addPendingImageAttachment(image, label: label)
+            return
+        }
+
+        guard let chatId = currentChatId else { return }
+        do {
+            let storedURL = try ChatAttachments.saveData(
+                data,
+                chatId: chatId,
+                suggestedName: label,
+                fileExtension: "dat"
+            )
+            let attachment = ChatMessageAttachment(
+                fileURL: storedURL,
+                chatId: chatId,
+                label: label,
+                kind: .file
+            )
+            pendingAttachments.append(attachment)
+        } catch {
+            print("Failed to save data attachment: \(error)")
         }
     }
     
@@ -412,6 +499,7 @@ class ChatManager: ObservableObject {
         
         let message = chat.messages[messageIndex]
         inputText = message.content
+        pendingAttachments = []
         editingMessageId = messageId
         
         // Save messages that will be temporarily hidden (including the message being edited)
@@ -447,13 +535,21 @@ class ChatManager: ObservableObject {
         let errorMessageTimestamp = chat.messages[messageIndex].timestamp
         guard let userMessageIndex = chat.messages.lastIndex(where: { $0.isUser && $0.timestamp < errorMessageTimestamp }) else { return }
         
-        let userMessage = chat.messages[userMessageIndex].content
+        let userMessage = chat.messages[userMessageIndex]
+        let llmPrompt = LLMPrompt(
+            text: userMessage.content,
+            attachments: userMessage.attachments.map { $0.toLLMAttachment() }
+        )
         
         // Remove the error message
         chat.messages.remove(at: messageIndex)
         
         // Create new placeholder for retry
-        let aiMessage = ChatMessage(content: "", isUser: false)
+        let aiMessage = ChatMessage(
+            content: "",
+            isUser: false,
+            reasoningDuration: AFMModelCatalog.supportsReasoning(chat.model) ? 0 : nil
+        )
         chat.messages.append(aiMessage)
         
         // Update the chat
@@ -462,7 +558,7 @@ class ChatManager: ObservableObject {
         
         // Retry the request with tool call tracking
         Task {
-            await self.processLLMResponse(userMessage: userMessage, chat: chat)
+            await self.processLLMResponse(prompt: llmPrompt, chat: chat)
         }
     }
     
@@ -483,6 +579,7 @@ class ChatManager: ObservableObject {
         editingMessageId = nil
         savedMessagesForEdit = []
         inputText = ""
+        pendingAttachments = []
         
         saveChats()
     }
@@ -540,7 +637,12 @@ class ChatManager: ObservableObject {
         contextUsage = currentSession.currentContextUsage(contextLimit: limit)
     }
     
+    private func sortChatsByActivity() {
+        chats.sort { $0.lastActivityDate > $1.lastActivityDate }
+    }
+
     private func saveChats() {
+        sortChatsByActivity()
         if let encoded = try? JSONEncoder().encode(chats) {
             UserDefaults.standard.set(encoded, forKey: "savedChats")
         }
@@ -551,6 +653,7 @@ class ChatManager: ObservableObject {
             do {
                 let decoded = try JSONDecoder().decode([Chat].self, from: data)
                 self.chats = decoded
+                sortChatsByActivity()
                 print("Successfully loaded \(decoded.count) chats")
             } catch {
                 print("Failed to decode saved chats: \(error)")
@@ -570,6 +673,7 @@ class ChatManager: ObservableObject {
                 print("Attempting automatic recovery...")
                 if let recoveredChats = tryDecodeBackupData(data) {
                     self.chats = recoveredChats
+                    sortChatsByActivity()
                     saveChats() // Save in the new format
                     print("Successfully auto-recovered \(recoveredChats.count) chats!")
                     // Clean up the backup since we recovered successfully
@@ -677,25 +781,49 @@ class ChatManager: ObservableObject {
     }
     
     // Process LLM response with real tool call information from transcript
-    private func processLLMResponse(userMessage: String, chat: Chat) async {
+    private func processLLMResponse(prompt: LLMPrompt, chat: Chat) async {
         var lastToolCalls: [ToolCallInfo] = []
         var hasSeenToolCalls = false
         var latestReasoning: String?
-        var latestReasoningTokenCount: Int?
+        var latestReasoningDuration: TimeInterval?
+        var reasoningStartDate: Date?
+        let tracksReasoningDuration = AFMModelCatalog.supportsReasoning(chat.model)
+
+        if tracksReasoningDuration {
+            reasoningStartDate = Date()
+            latestReasoningDuration = 0
+        }
+
+        func currentReasoningDuration() -> TimeInterval? {
+            guard tracksReasoningDuration else { return nil }
+            if let reasoningStartDate {
+                return Date().timeIntervalSince(reasoningStartDate)
+            }
+            return latestReasoningDuration
+        }
+
+        func finalizeReasoningDurationIfNeeded(for content: String) {
+            guard tracksReasoningDuration,
+                  let start = reasoningStartDate,
+                  !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            latestReasoningDuration = Date().timeIntervalSince(start)
+            reasoningStartDate = nil
+        }
 
         do {
-            let responseStream = currentSession.streamResponse(to: userMessage, temperature: chat.temperature)
+            let responseStream = currentSession.streamResponse(to: prompt, temperature: chat.temperature)
             var latestText = ""
             for try await event in responseStream {
                 await MainActor.run {
                     switch event {
                     case .contentUpdated(let fullText):
                         latestText = fullText
+                        finalizeReasoningDurationIfNeeded(for: fullText)
                         self.updateInFlightAssistantMessage(
                             content: latestText,
                             toolCalls: hasSeenToolCalls ? lastToolCalls : [],
                             reasoningContent: latestReasoning,
-                            reasoningTokenCount: latestReasoningTokenCount
+                            reasoningDuration: currentReasoningDuration()
                         )
                     case .toolCallsUpdated(let calls):
                         hasSeenToolCalls = true
@@ -721,19 +849,31 @@ class ChatManager: ObservableObject {
                             content: latestText,
                             toolCalls: lastToolCalls,
                             reasoningContent: latestReasoning,
-                            reasoningTokenCount: latestReasoningTokenCount
+                            reasoningDuration: currentReasoningDuration()
                         )
-                    case .reasoningUpdated(let content, let tokenCount):
+                    case .reasoningUpdated(let content):
                         latestReasoning = content
-                        latestReasoningTokenCount = tokenCount > 0 ? tokenCount : latestReasoningTokenCount
                         self.updateInFlightAssistantMessage(
                             content: latestText,
                             toolCalls: hasSeenToolCalls ? lastToolCalls : [],
                             reasoningContent: content,
-                            reasoningTokenCount: latestReasoningTokenCount
+                            reasoningDuration: currentReasoningDuration()
                         )
                     }
                     self.refreshContextUsage()
+                }
+            }
+
+            await MainActor.run {
+                if let start = reasoningStartDate {
+                    latestReasoningDuration = Date().timeIntervalSince(start)
+                    reasoningStartDate = nil
+                    self.updateInFlightAssistantMessage(
+                        content: latestText,
+                        toolCalls: hasSeenToolCalls ? lastToolCalls : [],
+                        reasoningContent: latestReasoning,
+                        reasoningDuration: latestReasoningDuration
+                    )
                 }
             }
             
@@ -775,7 +915,7 @@ class ChatManager: ObservableObject {
         content: String,
         toolCalls: [ToolCallInfo],
         reasoningContent: String?,
-        reasoningTokenCount: Int? = nil
+        reasoningDuration: TimeInterval? = nil
     ) {
         guard var currentChat = currentChat else { return }
         guard let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) else { return }
@@ -784,7 +924,7 @@ class ChatManager: ObservableObject {
             isUser: false,
             toolCalls: toolCalls,
             reasoningContent: reasoningContent,
-            reasoningTokenCount: reasoningTokenCount
+            reasoningDuration: reasoningDuration
         )
         self.currentChat = currentChat
     }

@@ -10,42 +10,72 @@ import SwiftUI
 struct ChatContainerView: View {
     @StateObject private var chatManager = ChatManager()
     @State private var selectedChatId: UUID?
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var showingModelUnavailableAlert = false
     
     private var availability: LLMAvailability { LLMProviderManager.shared.client.availability }
     
     var body: some View {
-        NavigationStack {
+        Group {
             switch availability {
             case .available:
-                ChatListView(chatManager: chatManager, selectedChatId: $selectedChatId)
+                NavigationSplitView(columnVisibility: $columnVisibility) {
+                    ChatListView(
+                        chatManager: chatManager,
+                        selectedChatId: $selectedChatId
+                    )
+                } detail: {
+                    detailContent
+                }
             case .unavailable(.deviceNotEligible):
-                ModelUnavailableView(
-                    title: "Device Not Compatible",
-                    message: "Your device doesn't support Apple Intelligence features. Apple Intelligence requires an A17 Pro, A18, or M1 chip or better.",
-                    icon: "exclamationmark.triangle"
-                )
+                NavigationStack {
+                    ModelUnavailableView(
+                        title: "Device Not Compatible",
+                        message: "Your device doesn't support Apple Intelligence features. Apple Intelligence requires an A17 Pro, A18, or M1 chip or better.",
+                        icon: "exclamationmark.triangle"
+                    )
+                }
             case .unavailable(.notEnabled):
-                ModelUnavailableView(
-                    title: "Apple Intelligence Required",
-                    message: "You need to enable Apple Intelligence in Settings. It might take a few minutes for your device to download the language model.",
-                    icon: "brain.head.profile",
-                    showSettingsButton: true
-                )
+                NavigationStack {
+                    ModelUnavailableView(
+                        title: "Apple Intelligence Required",
+                        message: "You need to enable Apple Intelligence in Settings. It might take a few minutes for your device to download the language model.",
+                        icon: "brain.head.profile",
+                        showSettingsButton: true
+                    )
+                }
             case .unavailable(.modelNotReady):
-                ModelUnavailableView(
-                    title: "Model Downloading",
-                    message: "The Apple Intelligence language model is currently downloading in the background. Check its status in Settings.",
-                    icon: "arrow.down.circle",
-                    showSettingsButton: true
-                )
+                NavigationStack {
+                    ModelUnavailableView(
+                        title: "Model Downloading",
+                        message: "The Apple Intelligence language model is currently downloading in the background. Check its status in Settings.",
+                        icon: "arrow.down.circle",
+                        showSettingsButton: true
+                    )
+                }
             case .unavailable(let other):
-                ModelUnavailableView(
-                    title: "Model Unavailable",
-                    message: "The Apple Intelligence language model is currently unavailable. Please try again later.\n\nError: \(other)",
-                    icon: "exclamationmark.circle"
-                )
+                NavigationStack {
+                    ModelUnavailableView(
+                        title: "Model Unavailable",
+                        message: "The Apple Intelligence language model is currently unavailable. Please try again later.\n\nError: \(other)",
+                        icon: "exclamationmark.circle"
+                    )
+                }
             }
+        }
+    }
+    
+    @ViewBuilder
+    private var detailContent: some View {
+        if let selectedChatId {
+            let title = chatManager.chats.first(where: { $0.id == selectedChatId })?.title ?? "New Chat"
+            ChatDetailView(
+                chatManager: chatManager,
+                chatId: selectedChatId,
+                initialTitle: title
+            )
+        } else {
+            ChatDetailPlaceholderView()
         }
     }
 }
@@ -108,69 +138,340 @@ struct ModelUnavailableView: View {
 struct ChatListView: View {
     @ObservedObject var chatManager: ChatManager
     @Binding var selectedChatId: UUID?
-    @State private var showingSettings: Bool = false
-    
+    @FocusState private var isSearchFieldFocused: Bool
+    @State private var showingSettings = false
+    @State private var searchText = ""
+    @State private var isSearchPresented = false
+
+    private var displayedSections: [(title: String, chats: [Chat])] {
+        if isActivelySearching || !searchText.isEmpty {
+            return searchResultSections(from: chatManager.chats, query: searchText)
+        }
+        return groupedChats(chatManager.chats)
+    }
+
+    private var isActivelySearching: Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
+        isSearchPresented
+        #endif
+    }
+
+    private var isShowingEmptySearchResults: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && displayedSections.isEmpty
+    }
+
     var body: some View {
-        List {
-            // New Chat button at the top
-            NavigationLink(destination: ChatDetailView(chatManager: chatManager, chatId: nil)) {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundColor(.accentColor)
-                        .font(.title2)
-                    Text("New Chat")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    Spacer()
-                }
-                .padding(.vertical, 8)
+        #if targetEnvironment(macCatalyst)
+        macBody
+        #else
+        iosBody
+        #endif
+    }
+
+    #if targetEnvironment(macCatalyst)
+    private var macBody: some View {
+        chatList
+            .safeAreaInset(edge: .top, spacing: 0) {
+                MacSidebarSearchField(text: $searchText)
             }
-            
-            if !chatManager.chats.isEmpty {
-                Section(header: Text("Recent Chats")) {
-                    ForEach(chatManager.chats) { chat in
-                        NavigationLink(destination: ChatDetailView(chatManager: chatManager, chatId: chat.id, initialTitle: chat.title)) {
-                            ChatRowView(
-                                chat: chat,
-                                isSelected: chat.id == chatManager.currentChatId,
-                                onSelect: { }
-                            )
-                        }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: createNewChat) {
+                        Image(systemName: "square.and.pencil")
                     }
-                    .onDelete(perform: deleteChats)
+                    .help("New Chat")
                 }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showingSettings = true }) {
+                        Image(systemName: "gear")
+                    }
+                    .help("Settings")
+                }
+            }
+            .sheet(isPresented: $showingSettings) {
+                GlobalSettingsView(chatManager: chatManager)
+            }
+            .onChange(of: selectedChatId) { _, newId in
+                handleSelectionChange(newId)
+            }
+    }
+    #endif
+
+    #if !targetEnvironment(macCatalyst)
+    private var iosBody: some View {
+        ZStack(alignment: .bottom) {
+            chatList
+                .safeAreaInset(edge: .bottom) {
+                    Color.clear.frame(height: FloatingActionButton.hitSize + 16)
+                }
+
+            GlassEffectContainer(spacing: 16) {
+                HStack {
+                    Spacer(minLength: 0)
+
+                    FloatingActionButton(icon: "square.and.pencil") {
+                        createNewChat()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: FloatingActionButton.hitSize)
+                .contentShape(Rectangle())
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+            .zIndex(1)
+        }
+        .navigationTitle(isSearchPresented ? "" : "Conversations")
+        .navigationBarTitleDisplayMode(isSearchPresented ? .inline : .large)
+        .toolbar(isSearchPresented ? .hidden : .visible, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if isSearchPresented {
+                GlassEffectContainer(spacing: 12) {
+                    HStack(spacing: 12) {
+                        Button(action: dismissSearch) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .frame(width: 36, height: 36)
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .accessibilityLabel("Cancel")
+
+                        IOSSearchField(text: $searchText, isFocused: $isSearchFieldFocused)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
             }
         }
-        .navigationTitle("AFM Chat")
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { showingSettings = true }) {
-                    Image(systemName: "gear")
+            if !isSearchPresented {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        isSearchPresented = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+
+                    Button(action: { showingSettings = true }) {
+                        Image(systemName: "gear")
+                    }
                 }
             }
         }
         .sheet(isPresented: $showingSettings) {
             GlobalSettingsView(chatManager: chatManager)
         }
-    }
-    
-    private func deleteChats(offsets: IndexSet) {
-        for index in offsets {
-            let chat = chatManager.chats[index]
-            chatManager.deleteChat(chat.id)
+        .onChange(of: isSearchPresented) { _, presented in
+            if presented {
+                isSearchFieldFocused = true
+            }
         }
+        .onChange(of: selectedChatId) { _, newId in
+            handleSelectionChange(newId)
+        }
+    }
+    #endif
+
+    private var chatList: some View {
+        List(selection: $selectedChatId) {
+            ForEach(displayedSections, id: \.title) { section in
+                Section {
+                    ForEach(section.chats) { chat in
+                        ChatRowView(chat: chat, searchQuery: searchText)
+                            .tag(chat.id)
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    deleteChat(chat)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                    }
+                } header: {
+                    Text(section.title)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                }
+            }
+        }
+        #if targetEnvironment(macCatalyst)
+        .listStyle(.sidebar)
+        #else
+        .listStyle(.plain)
+        #endif
+        .scrollContentBackground(.hidden)
+        .listRowSeparator(.visible)
+        .overlay {
+            if isShowingEmptySearchResults {
+                ContentUnavailableView.search(text: searchText)
+            }
+        }
+    }
+
+    private func createNewChat() {
+        let newChatId = chatManager.createNewChat()
+        selectedChatId = newChatId
+    }
+
+    #if !targetEnvironment(macCatalyst)
+    private func dismissSearch() {
+        isSearchPresented = false
+        searchText = ""
+        isSearchFieldFocused = false
+    }
+    #endif
+
+    private func handleSelectionChange(_ newId: UUID?) {
+        if let newId {
+            if chatManager.temporaryChat?.id == newId {
+                chatManager.currentChatId = newId
+            } else {
+                chatManager.switchToChat(newId)
+            }
+        }
+    }
+
+    private func deleteChat(_ chat: Chat) {
+        if chat.id == selectedChatId {
+            selectedChatId = nil
+        }
+        chatManager.deleteChat(chat.id)
+    }
+}
+
+#if !targetEnvironment(macCatalyst)
+private struct IOSSearchField: View {
+    @Binding var text: String
+    var isFocused: FocusState<Bool>.Binding
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .font(.body)
+
+            TextField("Search", text: $text)
+                .textFieldStyle(.plain)
+                .focused(isFocused)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .glassEffect(.regular.interactive(), in: .capsule)
+    }
+}
+#endif
+
+#if targetEnvironment(macCatalyst)
+private struct MacSidebarSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .font(.subheadline)
+
+            TextField("Search", text: $text)
+                .textFieldStyle(.plain)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+}
+#endif
+
+struct FloatingActionButton: View {
+    static let hitSize: CGFloat = 72
+    private static let visualSize: CGFloat = 54
+
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: Self.visualSize, height: Self.visualSize)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .frame(width: Self.hitSize, height: Self.hitSize)
+        .contentShape(Circle())
+    }
+}
+
+struct ChatDetailPlaceholderView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Start a New Conversation")
+                .font(.title2)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+            
+            Text("Select a conversation or tap compose to start a new one.")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+        #if targetEnvironment(macCatalyst)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        #else
+        .navigationTitle("AFM Chat")
+        #endif
     }
 }
 
 struct ChatDetailView: View {
     @ObservedObject var chatManager: ChatManager
-    let chatId: UUID?
+    let chatId: UUID
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showingSettings: Bool = false
     @State private var chatTitle: String
-    @Environment(\.dismiss) private var dismiss
     let initialTitle: String
     
-    init(chatManager: ChatManager, chatId: UUID?, initialTitle: String = "New Chat") {
+    init(
+        chatManager: ChatManager,
+        chatId: UUID,
+        initialTitle: String = "New Chat"
+    ) {
         self.chatManager = chatManager
         self.chatId = chatId
         self.initialTitle = initialTitle
@@ -179,8 +480,11 @@ struct ChatDetailView: View {
     
     var body: some View {
         ChatView(chatManager: chatManager)
-            .navigationBarBackButtonHidden(false)
+            .navigationBarBackButtonHidden(horizontalSizeClass == .regular)
             .navigationTitle(chatTitle)
+            #if targetEnvironment(macCatalyst)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     if chatManager.showsContextUsageIndicator,
@@ -194,11 +498,9 @@ struct ChatDetailView: View {
                     Button(action: { showingSettings = true }) {
                         Image(systemName: "gear")
                     }
-                    
-                    Button(action: chatManager.clearCurrentChat) {
-                        Image(systemName: "trash")
-                    }
-                    .disabled(chatManager.currentMessages.isEmpty)
+                    #if targetEnvironment(macCatalyst)
+                    .help("Chat Settings")
+                    #endif
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -315,26 +617,39 @@ struct ChatDetailView: View {
                             )
                         }
                     ),
-                    canEditToolsAndPrompt: chatManager.currentMessages.isEmpty,
+                    isSettingsEditable: !chatManager.isLoading,
+                    hasConversationHistory: !chatManager.currentMessages.isEmpty,
                     onSave: { }
                 )
             }
             .onAppear {
-                if let chatId = chatId {
-                    chatManager.switchToChat(chatId)
-                } else {
-                    // Create new chat if chatId is nil
-                    let newChatId = chatManager.createNewChat()
-                    chatManager.currentChatId = newChatId
-                }
-                chatManager.refreshContextWindowMetadata()
+                activateChat(chatId)
             }
-            .onChange(of: chatManager.currentChat?.title) { newTitle in
+            .onChange(of: chatId) { _, newId in
+                activateChat(newId)
+            }
+            .onChange(of: chatManager.currentChat?.title) { _, newTitle in
                 // Update title when chat title changes (e.g., after first message)
                 if let newTitle = newTitle {
                     chatTitle = newTitle
                 }
             }
+    }
+    
+    private func activateChat(_ id: UUID) {
+        if chatManager.temporaryChat?.id == id {
+            chatManager.currentChatId = id
+        } else {
+            chatManager.switchToChat(id)
+        }
+        
+        if let chat = chatManager.chats.first(where: { $0.id == id }) {
+            chatTitle = chat.title
+        } else {
+            chatTitle = "New Chat"
+        }
+        
+        chatManager.refreshContextWindowMetadata()
     }
 }
 
@@ -365,20 +680,8 @@ struct GlobalSettingsView: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Temperature: \(defaultTemperature, specifier: "%.1f")")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        Slider(value: $defaultTemperature, in: 0.0...2.0, step: 0.1)
-                    }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Model")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-
                         Picker("Model", selection: $defaultModel) {
                             ForEach(AFMModelCatalog.modelOptions()) { option in
                                 Text(option.displayName).tag(option.choice)
@@ -402,10 +705,6 @@ struct GlobalSettingsView: View {
 
                     if AFMModelCatalog.supportsReasoning(defaultModel) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Reasoning Level")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-
                             Picker("Reasoning Level", selection: $defaultReasoningLevel) {
                                 ForEach(LLMReasoningLevel.allCases) { level in
                                     Text(level.displayName).tag(level)
@@ -418,14 +717,18 @@ struct GlobalSettingsView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Temperature: \(defaultTemperature, specifier: "%.1f")")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        Slider(value: $defaultTemperature, in: 0.0...2.0, step: 0.1)
+                    }
                 }
                 
                 Section(header: Text("Tools")) {
-                    Text("Set the default tools behavior for new chats. This controls whether new chats will have access to tools like code execution and information lookup.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Toggle("Enable Tools (Experimental)", isOn: $defaultToolsEnabled)
+                    Toggle("Enable Tools", isOn: $defaultToolsEnabled)
                         .toggleStyle(SwitchToggleStyle())
                     
                     if defaultToolsEnabled {
@@ -487,35 +790,27 @@ struct GlobalSettingsView: View {
 
 struct ChatRowView: View {
     let chat: Chat
-    let isSelected: Bool
-    let onSelect: () -> Void
-    
+    var searchQuery: String = ""
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(chat.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .foregroundColor(.primary)
-                // Spacer()
-                // Text(chat.createdAt, style: .date)
-                //     .font(.caption)
-                //     .foregroundColor(.secondary)
-            }
-            
-            if let lastMessage = chat.messages.last {
-                Text(lastMessage.content)
-                    .font(.caption)
-                    .lineLimit(2)
-                    .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(chat.title)
+                .font(.body)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .foregroundStyle(.primary)
+
+            if let snippet = chat.matchingSnippet(for: searchQuery) {
+                Text(snippet)
+                    .font(.subheadline)
+                    .lineLimit(4)
+                    .foregroundStyle(.secondary)
             } else {
                 Text("No messages")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .italic()
             }
-            
         }
-        .padding(.vertical, 4)
     }
 } 

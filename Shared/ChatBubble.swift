@@ -9,104 +9,65 @@ import SwiftUI
 import MarkdownUI
 
 struct ReasoningView: View {
-    let reasoningContent: String?
-    let reasoningTokenCount: Int?
+    let reasoningDuration: TimeInterval?
     let isStreaming: Bool
-    @State private var isExpanded = false
+    let isThinkingActive: Bool
+    @State private var thinkingStartDate: Date?
 
-    private var tokenLabel: String? {
-        guard let reasoningTokenCount, reasoningTokenCount > 0 else { return nil }
-        return "\(reasoningTokenCount) tokens"
+    private func formatThinkingDuration(_ seconds: TimeInterval) -> String {
+        if seconds < 10 {
+            return String(format: "%.1fs", seconds)
+        }
+        if seconds < 60 {
+            return String(format: "%.0fs", seconds)
+        }
+        let minutes = Int(seconds) / 60
+        let remainingSeconds = Int(seconds) % 60
+        return "\(minutes)m \(remainingSeconds)s"
     }
 
-    private var bodyText: String? {
-        if let reasoningContent,
-           !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return reasoningContent
+    private func elapsedDuration(at date: Date) -> TimeInterval? {
+        guard let thinkingStartDate else { return reasoningDuration }
+        return date.timeIntervalSince(thinkingStartDate)
+    }
+
+    private func durationLabel(at date: Date) -> String? {
+        let elapsed: TimeInterval?
+        if isThinkingActive {
+            elapsed = elapsedDuration(at: date)
+        } else {
+            elapsed = reasoningDuration
         }
-        if isStreaming, tokenLabel != nil {
-            return "Thinking…"
-        }
-        if tokenLabel != nil {
-            return ""
-        }
-        return nil
+        guard let elapsed, elapsed >= 0, elapsed > 0 || isThinkingActive else { return nil }
+        return formatThinkingDuration(elapsed)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
-                }
-            }) {
-                HStack(spacing: 8) {
-                    if isStreaming {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                            .frame(width: 16, height: 16)
-                    } else {
-                        Image(systemName: "brain.head.profile")
-                            .foregroundColor(.purple)
-                            .frame(width: 16, height: 16)
-                    }
-
-                    HStack(spacing: 4) {
-                        Text("Thinking")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-
-                        if isStreaming {
-                            Text("...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-
-                        if let tokenLabel {
-                            Text("(\(tokenLabel))")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        } else if let reasoningContent {
-                            Text("(\(reasoningContent.count) chars)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .animation(.easeInOut(duration: 0.2), value: isExpanded)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+        HStack(spacing: 8) {
+            if isStreaming {
+                ProgressView()
+                    .scaleEffect(0.7)
+                    .frame(width: 16, height: 16)
+            } else {
+                Image(systemName: "brain.head.profile")
+                    .foregroundColor(.purple)
+                    .frame(width: 16, height: 16)
             }
-            .buttonStyle(PlainButtonStyle())
 
-            if isExpanded, let bodyText {
-                VStack(alignment: .leading, spacing: 8) {
-                    Divider()
-                        .padding(.horizontal, 12)
-
-                    ScrollView {
-                        Text(bodyText)
-                            .font(.caption)
-                            .fontDesign(.monospaced)
-                            .foregroundColor(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
+            Group {
+                if isThinkingActive {
+                    TimelineView(.periodic(from: .now, by: 0.1)) { context in
+                        reasoningHeader(durationLabel: durationLabel(at: context.date))
                     }
-                    .frame(maxHeight: 200)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
+                } else {
+                    reasoningHeader(durationLabel: durationLabel(at: .now))
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(Color.purple.opacity(0.05))
         .cornerRadius(8)
         .overlay(
@@ -114,16 +75,43 @@ struct ReasoningView: View {
                 .stroke(Color.purple.opacity(0.25), lineWidth: 1)
         )
         .onAppear {
+            syncThinkingStartDate()
+        }
+        .onChange(of: isThinkingActive) { _, _ in
+            syncThinkingStartDate()
+        }
+        .onChange(of: reasoningDuration) { _, _ in
+            syncThinkingStartDate()
+        }
+    }
+
+    @ViewBuilder
+    private func reasoningHeader(durationLabel: String?) -> some View {
+        HStack(spacing: 4) {
+            Text("Thinking")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+
             if isStreaming {
-                isExpanded = true
+                Text("...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            if let durationLabel {
+                Text("(\(durationLabel))")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
         }
-        .onChange(of: isStreaming) { _, streaming in
-            if streaming {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded = true
-                }
-            }
+    }
+
+    private func syncThinkingStartDate() {
+        if isThinkingActive {
+            thinkingStartDate = Date().addingTimeInterval(-(reasoningDuration ?? 0))
+        } else {
+            thinkingStartDate = nil
         }
     }
 }
@@ -132,17 +120,15 @@ struct ToolCallView: View {
     let toolCall: ToolCallInfo
     @State private var isExpanded: Bool = false
     @State private var rotationAngle: Double = 0
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Main tool call header (always visible)
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                 }
             }) {
                 HStack(spacing: 8) {
-                    // Status icon with loading animation
                     Group {
                         if toolCall.status == .executing {
                             ProgressView()
@@ -154,18 +140,17 @@ struct ToolCallView: View {
                                 .frame(width: 16, height: 16)
                         }
                     }
-                    
-                    // Tool usage text
+
                     HStack(spacing: 4) {
                         Text("Using")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        
+
                         Text(displayNameForTool(toolCall.toolName))
                             .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
-                        
+
                         if toolCall.status == .executing {
                             Text("...")
                                 .font(.caption)
@@ -173,11 +158,9 @@ struct ToolCallView: View {
                                 .opacity(0.7)
                         }
                     }
-                    
+
                     Spacer()
-                    
-                    
-                    // Expand/collapse arrow
+
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -188,15 +171,13 @@ struct ToolCallView: View {
                 .padding(.vertical, 8)
             }
             .buttonStyle(PlainButtonStyle())
-            
-            // Expandable details section
+
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Divider()
                         .padding(.horizontal, 12)
-                    
+
                     VStack(alignment: .leading, spacing: 6) {
-                        // Tool description
                         HStack {
                             Text("Description:")
                                 .font(.caption2)
@@ -208,8 +189,7 @@ struct ToolCallView: View {
                             .font(.caption2)
                             .foregroundColor(.primary)
                             .fixedSize(horizontal: false, vertical: true)
-                        
-                        // Arguments section
+
                         if !toolCall.arguments.isEmpty {
                             HStack {
                                 Text("Arguments:")
@@ -219,7 +199,7 @@ struct ToolCallView: View {
                                 Spacer()
                             }
                             .padding(.top, 4)
-                            
+
                             Text(formatArguments(toolCall.arguments))
                                 .font(.caption2)
                                 .foregroundColor(.primary)
@@ -229,8 +209,7 @@ struct ToolCallView: View {
                                 .cornerRadius(4)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        
-                        // Result section (if completed)
+
                         if toolCall.status == .completed, let result = toolCall.result, !result.isEmpty {
                             HStack {
                                 Text("Result:")
@@ -240,7 +219,7 @@ struct ToolCallView: View {
                                 Spacer()
                             }
                             .padding(.top, 4)
-                            
+
                             Text(result)
                                 .font(.caption2)
                                 .foregroundColor(.primary)
@@ -250,8 +229,7 @@ struct ToolCallView: View {
                                 .cornerRadius(4)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        
-                        // Error section (if failed)
+
                         if toolCall.status == .failed, let error = toolCall.error {
                             HStack {
                                 Text("Error:")
@@ -261,7 +239,7 @@ struct ToolCallView: View {
                                 Spacer()
                             }
                             .padding(.top, 4)
-                            
+
                             Text(error)
                                 .font(.caption2)
                                 .foregroundColor(.red)
@@ -285,7 +263,7 @@ struct ToolCallView: View {
                 .stroke(colorForStatus(toolCall.status).opacity(0.3), lineWidth: 1)
         )
     }
-    
+
     private func colorForStatus(_ status: ToolCallStatus) -> Color {
         switch status {
         case .pending: return .orange
@@ -294,7 +272,7 @@ struct ToolCallView: View {
         case .failed: return .red
         }
     }
-    
+
     private func backgroundColorForStatus(_ status: ToolCallStatus) -> Color {
         switch status {
         case .pending: return .orange.opacity(0.05)
@@ -303,7 +281,7 @@ struct ToolCallView: View {
         case .failed: return .red.opacity(0.05)
         }
     }
-    
+
     private func displayNameForTool(_ toolName: String) -> String {
         switch toolName.lowercased() {
         case "websearch": return "Web Search"
@@ -311,9 +289,8 @@ struct ToolCallView: View {
         default: return toolName.capitalized
         }
     }
-    
+
     private func formatArguments(_ arguments: String) -> String {
-        // Try to format JSON arguments nicely, fallback to raw string
         if let data = arguments.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data),
            let formattedData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted]),
@@ -331,14 +308,20 @@ struct ChatBubble: View {
     let onCopy: ((UUID) -> Void)?
     let onRetry: ((UUID) -> Void)?
 
-    init(message: ChatMessage, isStreaming: Bool = false, onEdit: ((UUID) -> Void)? = nil, onCopy: ((UUID) -> Void)? = nil, onRetry: ((UUID) -> Void)? = nil) {
+    init(
+        message: ChatMessage,
+        isStreaming: Bool = false,
+        onEdit: ((UUID) -> Void)? = nil,
+        onCopy: ((UUID) -> Void)? = nil,
+        onRetry: ((UUID) -> Void)? = nil
+    ) {
         self.message = message
         self.isStreaming = isStreaming
         self.onEdit = onEdit
         self.onCopy = onCopy
         self.onRetry = onRetry
     }
-    
+
     private var maxBubbleWidth: CGFloat {
         UIScreen.main.bounds.width * 0.75
     }
@@ -412,9 +395,10 @@ struct ChatBubble: View {
                 if !message.isUser {
                     if message.hasReasoningContent {
                         ReasoningView(
-                            reasoningContent: message.reasoningContent,
-                            reasoningTokenCount: message.reasoningTokenCount,
-                            isStreaming: isStreaming
+                            reasoningDuration: message.reasoningDuration,
+                            isStreaming: isStreaming,
+                            isThinkingActive: isStreaming
+                                && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         )
                         .frame(maxWidth: maxBubbleWidth, alignment: .leading)
                     }
@@ -476,4 +460,4 @@ struct ChatBubble: View {
             }
         }
     }
-} 
+}

@@ -166,6 +166,51 @@ struct ToolCallInfo: Identifiable, Codable {
     }
 }
 
+enum ChatMessageAttachmentKind: String, Codable {
+    case image
+    case file
+}
+
+struct ChatMessageAttachment: Identifiable, Codable, Equatable {
+    let id: UUID
+    let kind: ChatMessageAttachmentKind
+    let label: String
+    let relativePath: String
+    let mimeType: String?
+
+    var fileURL: URL {
+        ChatAttachments.resolveURL(relativePath: relativePath)
+    }
+
+    var isModelSupportedImage: Bool {
+        kind == .image || ChatAttachments.isImageAttachment(mimeType: mimeType, fileURL: fileURL)
+    }
+
+    init(id: UUID = UUID(), kind: ChatMessageAttachmentKind, label: String, relativePath: String, mimeType: String?) {
+        self.id = id
+        self.kind = kind
+        self.label = label
+        self.relativePath = relativePath
+        self.mimeType = mimeType
+    }
+
+    init(fileURL: URL, chatId: UUID, label: String, kind: ChatMessageAttachmentKind) {
+        self.id = UUID()
+        self.kind = kind
+        self.label = label
+        self.relativePath = ChatAttachments.relativePath(for: fileURL)
+        self.mimeType = ChatAttachments.mimeType(for: fileURL)
+    }
+
+    func toLLMAttachment() -> LLMAttachment {
+        LLMAttachment(
+            label: label,
+            fileURL: fileURL,
+            isImage: isModelSupportedImage
+        )
+    }
+}
+
 enum ToolCallStatus: String, Codable, CaseIterable {
     case pending = "pending"
     case executing = "executing"
@@ -199,7 +244,8 @@ struct ChatMessage: Identifiable {
     let error: ChatError?
     var toolCalls: [ToolCallInfo]
     var reasoningContent: String?
-    var reasoningTokenCount: Int?
+    var reasoningDuration: TimeInterval?
+    var attachments: [ChatMessageAttachment]
 
     init(
         content: String,
@@ -207,7 +253,8 @@ struct ChatMessage: Identifiable {
         error: ChatError? = nil,
         toolCalls: [ToolCallInfo] = [],
         reasoningContent: String? = nil,
-        reasoningTokenCount: Int? = nil
+        reasoningDuration: TimeInterval? = nil,
+        attachments: [ChatMessageAttachment] = []
     ) {
         self.id = UUID()
         self.content = content
@@ -216,7 +263,8 @@ struct ChatMessage: Identifiable {
         self.error = error
         self.toolCalls = toolCalls
         self.reasoningContent = reasoningContent
-        self.reasoningTokenCount = reasoningTokenCount
+        self.reasoningDuration = reasoningDuration
+        self.attachments = attachments
     }
 
     // Private initializer for decoding
@@ -228,7 +276,8 @@ struct ChatMessage: Identifiable {
         error: ChatError?,
         toolCalls: [ToolCallInfo],
         reasoningContent: String?,
-        reasoningTokenCount: Int?
+        reasoningDuration: TimeInterval?,
+        attachments: [ChatMessageAttachment]
     ) {
         self.id = id
         self.content = content
@@ -237,7 +286,12 @@ struct ChatMessage: Identifiable {
         self.error = error
         self.toolCalls = toolCalls
         self.reasoningContent = reasoningContent
-        self.reasoningTokenCount = reasoningTokenCount
+        self.reasoningDuration = reasoningDuration
+        self.attachments = attachments
+    }
+
+    var hasAttachments: Bool {
+        !attachments.isEmpty
     }
     
     var isError: Bool {
@@ -253,7 +307,7 @@ struct ChatMessage: Identifiable {
     }
 
     var hasReasoningContent: Bool {
-        if (reasoningTokenCount ?? 0) > 0 {
+        if reasoningDuration != nil {
             return true
         }
         guard let reasoningContent else { return false }
@@ -264,7 +318,7 @@ struct ChatMessage: Identifiable {
 // When adding tool calls, etc it broke loading old chats, so this lets us carefully load properties to make everything work
 extension ChatMessage: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, content, isUser, timestamp, error, toolCalls, reasoningContent, reasoningTokenCount
+        case id, content, isUser, timestamp, error, toolCalls, reasoningContent, reasoningDuration, reasoningTokenCount, attachments
     }
     
     init(from decoder: Decoder) throws {
@@ -280,7 +334,8 @@ extension ChatMessage: Codable {
         let error = try container.decodeIfPresent(ChatError.self, forKey: .error)
         let toolCalls = try container.decodeIfPresent([ToolCallInfo].self, forKey: .toolCalls) ?? []
         let reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
-        let reasoningTokenCount = try container.decodeIfPresent(Int.self, forKey: .reasoningTokenCount)
+        let reasoningDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .reasoningDuration)
+        let attachments = try container.decodeIfPresent([ChatMessageAttachment].self, forKey: .attachments) ?? []
         
         self.init(
             id: id,
@@ -290,7 +345,8 @@ extension ChatMessage: Codable {
             error: error,
             toolCalls: toolCalls,
             reasoningContent: reasoningContent,
-            reasoningTokenCount: reasoningTokenCount
+            reasoningDuration: reasoningDuration,
+            attachments: attachments
         )
     }
     
@@ -303,7 +359,10 @@ extension ChatMessage: Codable {
         try container.encodeIfPresent(error, forKey: .error)
         try container.encode(toolCalls, forKey: .toolCalls)
         try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
-        try container.encodeIfPresent(reasoningTokenCount, forKey: .reasoningTokenCount)
+        try container.encodeIfPresent(reasoningDuration, forKey: .reasoningDuration)
+        if !attachments.isEmpty {
+            try container.encode(attachments, forKey: .attachments)
+        }
     }
 }
 
@@ -391,14 +450,26 @@ struct Chat: Identifiable, Codable {
         try container.encode(toolWebSearchEnabled, forKey: .toolWebSearchEnabled)
     }
     
+    var lastActivityDate: Date {
+        messages.last?.timestamp ?? createdAt
+    }
+
     // Generate a fallback title based on the first user message (used if AI generation fails)
     mutating func generateFallbackTitle() {
-        if let firstUserMessage = messages.first(where: { $0.isUser })?.content.trimmingCharacters(in: .whitespacesAndNewlines) {
-            let words = firstUserMessage.components(separatedBy: .whitespacesAndNewlines)
+        if let firstUserMessage = messages.first(where: { $0.isUser }) {
+            let trimmed = firstUserMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let titleSource: String
+            if trimmed.isEmpty, let firstAttachment = firstUserMessage.attachments.first {
+                titleSource = firstAttachment.label
+            } else {
+                titleSource = trimmed
+            }
+            guard !titleSource.isEmpty else { return }
+            let words = titleSource.components(separatedBy: .whitespacesAndNewlines)
             if words.count > 4 {
                 self.title = words.prefix(4).joined(separator: " ") + "..."
             } else {
-                self.title = firstUserMessage
+                self.title = titleSource
             }
         }
     }

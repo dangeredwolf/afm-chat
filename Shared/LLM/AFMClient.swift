@@ -46,7 +46,6 @@ private struct TranscriptExtraction {
 
 private struct ReasoningSnapshot {
     var content: String?
-    var tokenCount: Int
 }
 
 private final class AFMSession: LLMSession {
@@ -80,7 +79,7 @@ private final class AFMSession: LLMSession {
         return makeContextUsage(contextLimit: contextLimit)
     }
 
-    func streamResponse(to prompt: String, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+    func streamResponse(to prompt: LLMPrompt, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             Task {
                 do {
@@ -88,27 +87,43 @@ private final class AFMSession: LLMSession {
                     switch pipeline {
                     case .legacy:
                         let options = GenerationOptions(temperature: temperature)
-                        stream = session.streamResponse(to: prompt, options: options)
+                        stream = session.streamResponse(to: prompt.text, options: options)
                     case .profile:
-                        if #available(iOS 27, *), AFMModelCatalog.supportsReasoning(configuration.model) {
+                        if #available(iOS 27, *), !prompt.attachments.isEmpty {
+                            let afmPrompt = AFMPromptBuilder.makePrompt(from: prompt)
+                            if AFMModelCatalog.supportsReasoning(configuration.model) {
+                                let contextOptions = ContextOptions(
+                                    reasoningLevel: configuration.reasoningLevel.toAFM()
+                                )
+                                stream = session.streamResponse(
+                                    to: afmPrompt,
+                                    options: GenerationOptions(temperature: temperature),
+                                    contextOptions: contextOptions
+                                )
+                            } else {
+                                stream = session.streamResponse(
+                                    to: afmPrompt,
+                                    options: GenerationOptions(temperature: temperature)
+                                )
+                            }
+                        } else if #available(iOS 27, *), AFMModelCatalog.supportsReasoning(configuration.model) {
                             let contextOptions = ContextOptions(
                                 reasoningLevel: configuration.reasoningLevel.toAFM()
                             )
                             stream = session.streamResponse(
-                                to: prompt,
+                                to: prompt.text,
                                 options: GenerationOptions(temperature: temperature),
                                 contextOptions: contextOptions
                             )
                         } else {
                             stream = session.streamResponse(
-                                to: prompt,
+                                to: prompt.text,
                                 options: GenerationOptions(temperature: temperature)
                             )
                         }
                     }
 
                     var bestContent = ""
-                    var lastReasoningTokenCount = 0
                     for try await response in stream {
                         if response.content.count > lastMaxContentLength {
                             lastMaxContentLength = response.content.count
@@ -116,20 +131,13 @@ private final class AFMSession: LLMSession {
                         }
 
                         let snapshotEntries: [Transcript.Entry]?
-                        let reasoningTokenCount: Int
                         if #available(iOS 27, *) {
                             snapshotEntries = Array(response.transcriptEntries)
-                            reasoningTokenCount = response.usage.output.reasoningTokenCount
-                            lastReasoningTokenCount = max(lastReasoningTokenCount, reasoningTokenCount)
                         } else {
                             snapshotEntries = nil
-                            reasoningTokenCount = 0
                         }
 
-                        let extracted = extractFromTranscript(
-                            preferredEntries: snapshotEntries,
-                            reasoningTokenCount: reasoningTokenCount
-                        )
+                        let extracted = extractFromTranscript(preferredEntries: snapshotEntries)
 
                         let fullText: String = extracted.responseContent.count >= bestContent.count
                             ? extracted.responseContent
@@ -149,10 +157,7 @@ private final class AFMSession: LLMSession {
                     }
 
                     if #available(iOS 27, *) {
-                        let finalExtraction = extractFromTranscript(
-                            preferredEntries: nil,
-                            reasoningTokenCount: lastReasoningTokenCount
-                        )
+                        let finalExtraction = extractFromTranscript(preferredEntries: nil)
                         yieldReasoningUpdate(finalExtraction.reasoningSnapshot, continuation: continuation)
                     }
 
@@ -181,18 +186,18 @@ private final class AFMSession: LLMSession {
         _ snapshot: ReasoningSnapshot,
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
     ) {
-        guard snapshot.content != nil || snapshot.tokenCount > 0 else { return }
+        guard let content = snapshot.content,
+              !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
-        let signature = (snapshot.content ?? "").hashValue ^ snapshot.tokenCount
+        let signature = content.hashValue
         guard signature != lastReasoningSignature else { return }
 
         lastReasoningSignature = signature
-        continuation.yield(.reasoningUpdated(content: snapshot.content, tokenCount: snapshot.tokenCount))
+        continuation.yield(.reasoningUpdated(content: content))
     }
 
     private func extractFromTranscript(
-        preferredEntries: [Transcript.Entry]?,
-        reasoningTokenCount: Int
+        preferredEntries: [Transcript.Entry]?
     ) -> TranscriptExtraction {
         var toolCalls: [LLMToolCallEvent] = []
         var toolOutputs: [String] = []
@@ -266,10 +271,7 @@ private final class AFMSession: LLMSession {
         return TranscriptExtraction(
             toolCalls: toolCalls,
             responseContent: fullContent,
-            reasoningSnapshot: makeReasoningSnapshot(
-                text: mergedReasoning,
-                tokenCount: reasoningTokenCount
-            )
+            reasoningSnapshot: makeReasoningSnapshot(text: mergedReasoning)
         )
     }
 
@@ -288,11 +290,10 @@ private final class AFMSession: LLMSession {
         return right.count >= left.count ? right : left
     }
 
-    private func makeReasoningSnapshot(text: String, tokenCount: Int) -> ReasoningSnapshot {
+    private func makeReasoningSnapshot(text: String) -> ReasoningSnapshot {
         let sanitized = sanitizeReasoningText(text)
         return ReasoningSnapshot(
-            content: sanitized.isEmpty ? nil : sanitized,
-            tokenCount: tokenCount
+            content: sanitized.isEmpty ? nil : sanitized
         )
     }
 

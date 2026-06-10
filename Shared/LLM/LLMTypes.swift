@@ -116,16 +116,54 @@ public struct LLMHistoryToolCall: Sendable {
     }
 }
 
+public struct LLMAttachment: Sendable {
+    public let label: String
+    public let fileURL: URL
+    public let isImage: Bool
+
+    public init(label: String, fileURL: URL, isImage: Bool) {
+        self.label = label
+        self.fileURL = fileURL
+        self.isImage = isImage
+    }
+}
+
+public struct LLMPrompt: Sendable {
+    public let text: String
+    public let attachments: [LLMAttachment]
+
+    public init(text: String = "", attachments: [LLMAttachment] = []) {
+        self.text = text
+        self.attachments = attachments
+    }
+
+    public var isEmpty: Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty
+    }
+}
+
 public struct LLMHistoryEntry: Sendable {
     public let isUser: Bool
     public let content: String
+    public let attachments: [LLMAttachment]
     public let toolCalls: [LLMHistoryToolCall]
 
-    public init(isUser: Bool, content: String, toolCalls: [LLMHistoryToolCall] = []) {
+    public init(
+        isUser: Bool,
+        content: String,
+        attachments: [LLMAttachment] = [],
+        toolCalls: [LLMHistoryToolCall] = []
+    ) {
         self.isUser = isUser
         self.content = content
+        self.attachments = attachments
         self.toolCalls = toolCalls
     }
+}
+
+public enum LLMGuardrailsMode: String, Codable, Sendable {
+    case `default`
+    case permissiveContentTransformations
 }
 
 public struct LLMSessionConfiguration: Sendable {
@@ -133,17 +171,20 @@ public struct LLMSessionConfiguration: Sendable {
     public var temperature: Double
     public var reasoningLevel: LLMReasoningLevel
     public var history: [LLMHistoryEntry]
+    public var guardrails: LLMGuardrailsMode
 
     public init(
         model: LLMModelChoice = .onDevice,
         temperature: Double = 1.0,
         reasoningLevel: LLMReasoningLevel = .moderate,
-        history: [LLMHistoryEntry] = []
+        history: [LLMHistoryEntry] = [],
+        guardrails: LLMGuardrailsMode = .default
     ) {
         self.model = model
         self.temperature = temperature
         self.reasoningLevel = reasoningLevel
         self.history = history
+        self.guardrails = guardrails
     }
 }
 
@@ -153,9 +194,15 @@ public protocol LLMClient {
 }
 
 public protocol LLMSession {
-    func streamResponse(to prompt: String, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error>
+    func streamResponse(to prompt: LLMPrompt, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error>
     func respond(to prompt: String, temperature: Double) async throws -> String
     func currentContextUsage(contextLimit: Int) -> LLMContextUsage?
+}
+
+extension LLMSession {
+    func streamResponse(to prompt: String, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+        streamResponse(to: LLMPrompt(text: prompt), temperature: temperature)
+    }
 }
 
 extension LLMSession {
@@ -221,7 +268,7 @@ public struct LLMToolCallEvent: Codable, Identifiable {
 public enum LLMStreamEvent {
     case contentUpdated(fullText: String)
     case toolCallsUpdated(calls: [LLMToolCallEvent])
-    case reasoningUpdated(content: String?, tokenCount: Int)
+    case reasoningUpdated(content: String?)
 }
 
 public enum LLMAvailability: Equatable {

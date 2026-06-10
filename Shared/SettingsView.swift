@@ -15,7 +15,8 @@ struct SettingsView: View {
     @Binding var toolsEnabled: Bool
     @Binding var toolCodeInterpreterEnabled: Bool
     @Binding var toolWebSearchEnabled: Bool
-    let canEditToolsAndPrompt: Bool
+    let isSettingsEditable: Bool
+    let hasConversationHistory: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var tempPrompt: String = ""
     @State private var tempTemperature: Double = 1.0
@@ -54,15 +55,15 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
-                        .disabled(!canEditToolsAndPrompt)
-                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+                        .disabled(!isSettingsEditable)
+                        .opacity(isSettingsEditable ? 1.0 : 0.6)
 
                     Button("Reset to Default") {
                         tempPrompt = defaultPrompt
                     }
                     .foregroundColor(.blue)
-                    .disabled(!canEditToolsAndPrompt)
-                    .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+                    .disabled(!isSettingsEditable)
+                    .opacity(isSettingsEditable ? 1.0 : 0.6)
                 }
 
                 Section(header: Text("Model")) {
@@ -76,8 +77,8 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .disabled(!canEditToolsAndPrompt)
-                    .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+                    .disabled(!isSettingsEditable)
+                    .opacity(isSettingsEditable ? 1.0 : 0.6)
 
                     if let selectedModelOption {
                         Text(selectedModelOption.description)
@@ -117,8 +118,10 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
+                        .disabled(!isSettingsEditable)
                     }
                     .padding(.vertical, 4)
+                    .opacity(isSettingsEditable ? 1.0 : 0.6)
                 }
 
                 if supportsReasoningForSelectedModel {
@@ -133,6 +136,8 @@ struct SettingsView: View {
                             }
                         }
                         .pickerStyle(.segmented)
+                        .disabled(!isSettingsEditable)
+                        .opacity(isSettingsEditable ? 1.0 : 0.6)
 
                         Text(tempReasoningLevel.description)
                             .font(.caption)
@@ -141,15 +146,11 @@ struct SettingsView: View {
                 }
 
                 Section(header: Text("Tools")) {
-                    Text("Grant the language model additional tools such as internet access and code execution.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
                     Toggle("Enable Tools", isOn: $tempToolsEnabled)
                         .toggleStyle(SwitchToggleStyle())
                         .padding(.vertical, 6)
-                        .disabled(!canEditToolsAndPrompt)
-                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+                        .disabled(!isSettingsEditable)
+                        .opacity(isSettingsEditable ? 1.0 : 0.6)
 
                     if tempToolsEnabled {
                         Toggle(isOn: $tempToolCodeInterpreterEnabled) {
@@ -159,8 +160,8 @@ struct SettingsView: View {
                             }
                         }
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                        .disabled(!canEditToolsAndPrompt)
-                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+                        .disabled(!isSettingsEditable)
+                        .opacity(isSettingsEditable ? 1.0 : 0.6)
 
                         Toggle(isOn: $tempToolWebSearchEnabled) {
                             HStack {
@@ -169,8 +170,8 @@ struct SettingsView: View {
                             }
                         }
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                        .disabled(!canEditToolsAndPrompt)
-                        .opacity(canEditToolsAndPrompt ? 1.0 : 0.6)
+                        .disabled(!isSettingsEditable)
+                        .opacity(isSettingsEditable ? 1.0 : 0.6)
                     }
                 }
             }
@@ -196,7 +197,8 @@ struct SettingsView: View {
                         dismiss()
                     }
                     .disabled(
-                        tempPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        !isSettingsEditable
+                        || tempPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         || !(selectedModelOption?.isAvailable ?? false)
                     )
                 }

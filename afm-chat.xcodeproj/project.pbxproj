@@ -33,11 +33,23 @@
 		36984D6A2E45DB6D00CDC79C /* AFMEntitlements.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D692E45DB6D00CDC79C /* AFMEntitlements.swift */; };
 		36984D6B2E45DB6E00CDC79C /* ContextUsageIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D6C2E45DB6E00CDC79C /* ContextUsageIndicator.swift */; };
 		36984D6D2E45DB6E00CDC79C /* ContextUsageIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36984D6C2E45DB6E00CDC79C /* ContextUsageIndicator.swift */; };
+		36A1B2C42E45DB6E00CDC79C /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A1B2C32E45DB6E00CDC79C /* ChatInputBar.swift */; };
+		36A1B2C52E45DB6E00CDC79C /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A1B2C32E45DB6E00CDC79C /* ChatInputBar.swift */; };
+		36B2C3D42E45DB6F00CDC79C /* ChatDateGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B2C3D32E45DB6F00CDC79C /* ChatDateGrouping.swift */; };
+		36B2C3D52E45DB6F00CDC79C /* ChatDateGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B2C3D32E45DB6F00CDC79C /* ChatDateGrouping.swift */; };
+		36C4D5E72E45DB7000CDC79C /* ChatSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C4D5E62E45DB7000CDC79C /* ChatSearch.swift */; };
+		36C4D5E82E45DB7000CDC79C /* ChatSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C4D5E62E45DB7000CDC79C /* ChatSearch.swift */; };
 		36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
-		36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = 36D70A042DF9482B006889A7 /* appclip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = 36D70A042DF9482B006889A7 /* appclip.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F992E137295009B8F2F /* SearchTool.swift */; };
 		36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F992E137295009B8F2F /* SearchTool.swift */; };
+		36F1A1032E50A001000001 /* ChatAttachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1012E50A001000001 /* ChatAttachments.swift */; };
+		36F1A1042E50A002000002 /* ChatAttachmentPickers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1022E50A002000002 /* ChatAttachmentPickers.swift */; };
+		36F1A1052E50A001000003 /* ChatAttachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1012E50A001000001 /* ChatAttachments.swift */; };
+		36F1A1062E50A002000004 /* ChatAttachmentPickers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1022E50A002000002 /* ChatAttachmentPickers.swift */; };
+		36F1A1072E50A003000005 /* ChatAttachmentDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1082E50A003000006 /* ChatAttachmentDrop.swift */; };
+		36F1A1092E50A003000007 /* ChatAttachmentDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1082E50A003000006 /* ChatAttachmentDrop.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,10 +87,16 @@
 		36984D662E45DB6C00CDC79C /* AFMModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMModelCatalog.swift; sourceTree = "<group>"; };
 		36984D692E45DB6D00CDC79C /* AFMEntitlements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AFMEntitlements.swift; sourceTree = "<group>"; };
 		36984D6C2E45DB6E00CDC79C /* ContextUsageIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextUsageIndicator.swift; sourceTree = "<group>"; };
+		36A1B2C32E45DB6E00CDC79C /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
 		36A7A3FC2DF923BC00B52461 /* afm-chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "afm-chat.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		36B2C3D32E45DB6F00CDC79C /* ChatDateGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDateGrouping.swift; sourceTree = "<group>"; };
+		36C4D5E62E45DB7000CDC79C /* ChatSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSearch.swift; sourceTree = "<group>"; };
 		36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptTool.swift; sourceTree = "<group>"; };
 		36D70A042DF9482B006889A7 /* appclip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = appclip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		36EC3F992E137295009B8F2F /* SearchTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchTool.swift; sourceTree = "<group>"; };
+		36F1A1012E50A001000001 /* ChatAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachments.swift; sourceTree = "<group>"; };
+		36F1A1022E50A002000002 /* ChatAttachmentPickers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentPickers.swift; sourceTree = "<group>"; };
+		36F1A1082E50A003000006 /* ChatAttachmentDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentDrop.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -142,7 +160,13 @@
 				3658A6952DFBA8A500254350 /* Tools */,
 				3658A65D2DF9EE1A00254350 /* ChatManager.swift */,
 				3658A61F2DF9E89C00254350 /* ChatModels.swift */,
+				36F1A1012E50A001000001 /* ChatAttachments.swift */,
+				36F1A1022E50A002000002 /* ChatAttachmentPickers.swift */,
+				36F1A1082E50A003000006 /* ChatAttachmentDrop.swift */,
+				36B2C3D32E45DB6F00CDC79C /* ChatDateGrouping.swift */,
+				36C4D5E62E45DB7000CDC79C /* ChatSearch.swift */,
 				3658A6202DF9E89C00254350 /* ChatView.swift */,
+				36A1B2C32E45DB6E00CDC79C /* ChatInputBar.swift */,
 				36984D6C2E45DB6E00CDC79C /* ContextUsageIndicator.swift */,
 				3658A6212DF9E89C00254350 /* SettingsView.swift */,
 			);
@@ -303,10 +327,16 @@
 				36984D5F2E45DB6A00CDC79C /* LLMTypes.swift in Sources */,
 				3658A6232DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				3658A6242DF9E89C00254350 /* ChatModels.swift in Sources */,
+				36B2C3D42E45DB6F00CDC79C /* ChatDateGrouping.swift in Sources */,
+				36C4D5E72E45DB7000CDC79C /* ChatSearch.swift in Sources */,
 				36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */,
 				3658A6252DF9E89C00254350 /* ChatBubble.swift in Sources */,
 				3658A6262DF9E89C00254350 /* SettingsView.swift in Sources */,
 				3658A6272DF9E89C00254350 /* ChatView.swift in Sources */,
+				36A1B2C42E45DB6E00CDC79C /* ChatInputBar.swift in Sources */,
+				36F1A1032E50A001000001 /* ChatAttachments.swift in Sources */,
+				36F1A1042E50A002000002 /* ChatAttachmentPickers.swift in Sources */,
+				36F1A1072E50A003000005 /* ChatAttachmentDrop.swift in Sources */,
 				36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
 				3658A65E2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 				36984D6B2E45DB6E00CDC79C /* ContextUsageIndicator.swift in Sources */,
@@ -323,9 +353,15 @@
 				3658A6282DF9E89C00254350 /* ChatContainerView.swift in Sources */,
 				36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */,
 				3658A6292DF9E89C00254350 /* ChatModels.swift in Sources */,
+				36B2C3D52E45DB6F00CDC79C /* ChatDateGrouping.swift in Sources */,
+				36C4D5E82E45DB7000CDC79C /* ChatSearch.swift in Sources */,
 				3658A62A2DF9E89C00254350 /* ChatBubble.swift in Sources */,
 				3658A62B2DF9E89C00254350 /* SettingsView.swift in Sources */,
 				3658A62C2DF9E89C00254350 /* ChatView.swift in Sources */,
+				36A1B2C52E45DB6E00CDC79C /* ChatInputBar.swift in Sources */,
+				36F1A1052E50A001000003 /* ChatAttachments.swift in Sources */,
+				36F1A1062E50A002000004 /* ChatAttachmentPickers.swift in Sources */,
+				36F1A1092E50A003000007 /* ChatAttachmentDrop.swift in Sources */,
 				36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
 				3658A65F2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 				36984D6D2E45DB6E00CDC79C /* ContextUsageIndicator.swift in Sources */,
@@ -336,6 +372,7 @@
 /* Begin PBXTargetDependency section */
 		36D70A0F2DF9482C006889A7 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
+			platformFilter = ios;
 			target = 36D70A032DF9482B006889A7 /* appclip */;
 			targetProxy = 36D70A0E2DF9482C006889A7 /* PBXContainerItemProxy */;
 		};
@@ -470,18 +507,32 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "afm-chat/afm-chat.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = V4MZKCA3P6;
+				DEVELOPMENT_TEAM = V4MZKCA3P6;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "afm-chat/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCameraUsageDescription = "AFM Chat uses the camera to attach photos to your messages.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -493,11 +544,21 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "afm 3";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -519,11 +580,16 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = V4MZKCA3P6;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "afm-chat/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCameraUsageDescription = "AFM Chat uses the camera to attach photos to your messages.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -535,11 +601,15 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -574,7 +644,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat.Clip;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -610,7 +680,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat.Clip;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

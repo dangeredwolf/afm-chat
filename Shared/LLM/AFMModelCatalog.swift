@@ -92,12 +92,24 @@ enum AFMModelCatalog {
     }
 
     @available(iOS 27, *)
-    static func languageModel(for choice: LLMModelChoice) -> any LanguageModel {
+    static func languageModel(
+        for choice: LLMModelChoice,
+        guardrails: LLMGuardrailsMode = .default
+    ) -> any LanguageModel {
         switch choice {
         case .onDevice:
-            return SystemLanguageModel.default
+            return systemLanguageModel(guardrails: guardrails)
         case .privateCloudCompute:
             return PrivateCloudComputeLanguageModel()
+        }
+    }
+
+    static func systemLanguageModel(guardrails: LLMGuardrailsMode = .default) -> SystemLanguageModel {
+        switch guardrails {
+        case .default:
+            return SystemLanguageModel.default
+        case .permissiveContentTransformations:
+            return SystemLanguageModel(guardrails: .permissiveContentTransformations)
         }
     }
 

@@ -20,15 +20,25 @@ enum AFMTranscriptBuilder {
     static func entries(from history: [LLMHistoryEntry]) -> [Transcript.Entry] {
         history.flatMap { message in
             if message.isUser {
-                return [promptEntry(content: message.content)]
+                return [promptEntry(content: message.content, attachments: message.attachments)]
             }
             return assistantEntries(for: message)
         }
     }
 
-    private static func promptEntry(content: String) -> Transcript.Entry {
-        let textSegment = Transcript.Segment.text(Transcript.TextSegment(content: content))
-        let prompt = Transcript.Prompt(segments: [textSegment])
+    private static func promptEntry(content: String, attachments: [LLMAttachment] = []) -> Transcript.Entry {
+        var segments: [Transcript.Segment] = []
+        if #available(iOS 27, *) {
+            segments.append(contentsOf: AFMPromptBuilder.attachmentSegments(from: attachments))
+        }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            segments.append(.text(Transcript.TextSegment(content: content)))
+        }
+        if segments.isEmpty {
+            segments.append(.text(Transcript.TextSegment(content: "")))
+        }
+        let prompt = Transcript.Prompt(segments: segments)
         return .prompt(prompt)
     }
 
@@ -127,13 +137,13 @@ enum AFMSessionFactory {
             )
         } else if historyEntries.isEmpty {
             return LanguageModelSession(
-                model: SystemLanguageModel.default,
+                model: AFMModelCatalog.systemLanguageModel(guardrails: resolved.guardrails),
                 tools: tools,
                 instructions: instructions
             )
         } else {
             return LanguageModelSession(
-                model: SystemLanguageModel.default,
+                model: AFMModelCatalog.systemLanguageModel(guardrails: resolved.guardrails),
                 tools: tools,
                 transcript: Transcript(entries: historyEntries)
             )
@@ -147,7 +157,10 @@ enum AFMSessionFactory {
         configuration: LLMSessionConfiguration,
         history: [Transcript.Entry]
     ) -> LanguageModelSession {
-        let model = AFMModelCatalog.languageModel(for: configuration.model)
+        let model = AFMModelCatalog.languageModel(
+            for: configuration.model,
+            guardrails: configuration.guardrails
+        )
 
         var profile = LanguageModelSession.Profile {
             ChatSessionInstructions(prompt: instructions, tools: tools)
@@ -184,5 +197,70 @@ enum AFMSessionPipeline {
         } else {
             return .legacy
         }
+    }
+}
+
+@available(iOS 27, *)
+enum AFMPromptBuilder {
+    static func makePrompt(from llmPrompt: LLMPrompt) -> Prompt {
+        let images = llmPrompt.attachments.filter(\.isImage)
+        let imageParts = images.map { Attachment(imageURL: $0.fileURL).label($0.label) }
+        let trimmed = llmPrompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let unsupported = llmPrompt.attachments.filter { !$0.isImage }.map(\.label)
+        let fileNote = unsupported.isEmpty
+            ? nil
+            : "Attached files (not sent as images): " + unsupported.joined(separator: ", ")
+
+        if imageParts.isEmpty {
+            if let fileNote {
+                return Prompt(trimmed.isEmpty ? fileNote : "\(trimmed)\n\n\(fileNote)")
+            }
+            return Prompt(trimmed)
+        }
+
+        let imagesPrompt = PromptBuilder.buildArray(imageParts)
+        return Prompt {
+            imagesPrompt
+            if !trimmed.isEmpty {
+                trimmed
+            }
+            if let fileNote {
+                fileNote
+            }
+        }
+    }
+
+    static func promptSegments(from llmPrompt: LLMPrompt) -> [Transcript.Segment] {
+        var segments = attachmentSegments(from: llmPrompt.attachments)
+        let trimmed = llmPrompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            segments.append(.text(Transcript.TextSegment(content: llmPrompt.text)))
+        }
+        return segments
+    }
+
+    static func attachmentSegments(from attachments: [LLMAttachment]) -> [Transcript.Segment] {
+        var segments: [Transcript.Segment] = []
+        var unsupportedFileLabels: [String] = []
+
+        for attachment in attachments {
+            if attachment.isImage {
+                let imageAttachment = Transcript.ImageAttachment(imageURL: attachment.fileURL)
+                let segment = Transcript.AttachmentSegment(
+                    content: .image(imageAttachment),
+                    label: attachment.label
+                )
+                segments.append(.attachment(segment))
+            } else {
+                unsupportedFileLabels.append(attachment.label)
+            }
+        }
+
+        if !unsupportedFileLabels.isEmpty {
+            let note = "Attached files (not sent as images): " + unsupportedFileLabels.joined(separator: ", ")
+            segments.append(.text(Transcript.TextSegment(content: note)))
+        }
+
+        return segments
     }
 }

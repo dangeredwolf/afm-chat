@@ -7,10 +7,17 @@
 
 import SwiftUI
 import FoundationModels
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct ChatView: View {
     @StateObject var chatManager: ChatManager
     @FocusState private var isInputFocused: Bool
+    @State private var showPhotoPicker = false
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var showCamera = false
+    @State private var showFileImporter = false
+    @State private var isAttachmentDropTargeted = false
     
     init(chatManager: ChatManager = ChatManager()) {
         _chatManager = StateObject(wrappedValue: chatManager)
@@ -25,10 +32,6 @@ struct ChatView: View {
                         if chatManager.currentMessages.isEmpty {
                             // Welcome message for new chats
                             VStack(spacing: 16) {
-                                // Image(systemName: "message.circle")
-                                //     .font(.system(size: 60))
-                                //     .foregroundColor(.secondary.opacity(0.6))
-                                
                                 Text("Start a New Conversation")
                                     .font(.title2)
                                     .fontWeight(.medium)
@@ -124,38 +127,87 @@ struct ChatView: View {
                 .background(Color.orange.opacity(0.05))
             }
             
-            // Input area
-            HStack {
-                TextField(
-                    chatManager.editingMessageId != nil ? "Edit your message..." : "Type your message...",
-                    text: $chatManager.inputText,
-                    axis: .vertical
-                )
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .lineLimit(1...4)
-                    .disabled(chatManager.isLoading)
-                    .focused($isInputFocused)
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 8)
-                    .onSubmit {
-                        chatManager.sendMessage()
-                        isInputFocused = false
-                    }
-                
-                Button(action: {
+            ChatInputBar(
+                text: $chatManager.inputText,
+                isFocused: $isInputFocused,
+                placeholder: chatManager.editingMessageId != nil ? "Edit your message..." : "Type your message...",
+                isLoading: chatManager.isLoading,
+                isEditing: chatManager.editingMessageId != nil,
+                showsAttachmentButton: ChatAttachments.isSupported,
+                pendingAttachments: chatManager.pendingAttachments,
+                onSend: {
                     chatManager.sendMessage()
                     isInputFocused = false
-                }) {
-                    if chatManager.isLoading {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: chatManager.editingMessageId != nil ? "checkmark" : "paperplane.fill")
-                    }
+                },
+                onPickPhoto: {
+                    showPhotoPicker = true
+                },
+                onTakePhoto: {
+                    showCamera = true
+                },
+                onPickFile: {
+                    showFileImporter = true
+                },
+                onRemoveAttachment: { attachmentId in
+                    chatManager.removePendingAttachment(attachmentId)
                 }
-                .disabled(chatManager.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || chatManager.isLoading)
+            )
+        }
+        .attachmentDropTarget(chatManager: chatManager, isTargeted: $isAttachmentDropTargeted)
+        .attachmentDropOverlay(isTargeted: isAttachmentDropTargeted)
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 5,
+            matching: .images
+        )
+        .onChange(of: selectedPhotoItems) { _, newItems in
+            guard !newItems.isEmpty else { return }
+            Task {
+                await importSelectedPhotos(newItems)
+                selectedPhotoItems = []
             }
-            .padding()
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraImagePicker(
+                onImagePicked: { image in
+                    showCamera = false
+                    chatManager.addPendingImageAttachment(image, label: "Photo.jpg")
+                },
+                onCancel: {
+                    showCamera = false
+                }
+            )
+            .ignoresSafeArea()
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                for url in urls {
+                    let label = url.lastPathComponent
+                    let kind: ChatMessageAttachmentKind = ChatAttachments.isImageAttachment(
+                        mimeType: ChatAttachments.mimeType(for: url),
+                        fileURL: url
+                    ) ? .image : .file
+                    chatManager.addPendingAttachment(from: url, label: label, kind: kind)
+                }
+            case .failure(let error):
+                print("File import failed: \(error)")
+            }
         }
     }
-} 
+
+    @MainActor
+    private func importSelectedPhotos(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                chatManager.addPendingImageAttachment(image, label: "Photo.jpg")
+            }
+        }
+    }
+}
