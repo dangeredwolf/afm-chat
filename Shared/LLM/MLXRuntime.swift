@@ -35,8 +35,10 @@ final class MLXRuntime {
         await MLXModelFactory.evict(id: id)
     }
 
-    /// Makes `id` the only MLX model held in GPU memory. Pass `nil` when the
-    /// active chat is an Apple Intelligence model we cannot unload.
+    /// Makes `id` the only MLX model held in GPU memory. Call this when a
+    /// generation is about to start, not when browsing chats or picking a
+    /// model — rapid activate/evict of weights is unstable. Pass `nil` when
+    /// the upcoming turn uses Apple Intelligence.
     func activate(
         id: String?,
         pipelineTag: String?,
@@ -60,16 +62,6 @@ final class MLXRuntime {
             onPhase: onPhase
         )
         guard epoch == activationEpoch else { throw CancellationError() }
-    }
-
-    func prepareInBackground(id: String?, pipelineTag: String?, displayName: String) {
-        Task {
-            try? await activate(
-                id: id,
-                pipelineTag: pipelineTag,
-                displayName: displayName
-            )
-        }
     }
 
     func ensureReady(

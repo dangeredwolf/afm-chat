@@ -30,10 +30,7 @@ struct ModelDownloadItem: Identifiable, Equatable {
     var fractionCompleted: Double {
         guard totalBytes > 0 else { return 0 }
         let raw = Double(completedBytes) / Double(totalBytes)
-        if status == .downloading {
-            return min(0.99, raw)
-        }
-        return min(1, raw)
+        return min(1, max(0, raw))
     }
 
     var statusText: String {
@@ -41,13 +38,20 @@ struct ModelDownloadItem: Identifiable, Equatable {
         case .queued:
             return "Queued"
         case .downloading:
-            if let currentFileName {
-                return "\(sizeText) · \(currentFileName)"
+            var parts: [String] = []
+            if let percentText {
+                parts.append(percentText)
             }
             if !sizeText.isEmpty {
-                return sizeText
+                parts.append(sizeText)
             }
-            return "Connecting…"
+            if let currentFileName {
+                parts.append(currentFileName)
+            }
+            if parts.isEmpty {
+                return "Connecting…"
+            }
+            return parts.joined(separator: " · ")
         case .loading:
             return "Preparing model…"
         case .failed(let message):
@@ -56,16 +60,19 @@ struct ModelDownloadItem: Identifiable, Equatable {
     }
 
     var sizeText: String {
-        if totalBytes > 0, completedBytes >= totalBytes, status == .downloading {
-            return "\(DownloadByteFormat.bytes(completedBytes))+ downloaded"
+        DownloadByteFormat.progress(completed: completedBytes, total: totalBytes, downloading: status == .downloading)
+    }
+
+    var percentText: String? {
+        guard status == .downloading, totalBytes > 0, completedBytes > 0 else { return nil }
+        let percent = Double(completedBytes) / Double(totalBytes) * 100
+        if percent < 1 {
+            return "<1%"
         }
-        if totalBytes > 0 {
-            return "\(DownloadByteFormat.bytes(completedBytes)) of \(DownloadByteFormat.bytes(totalBytes))"
+        if percent >= 99.5, completedBytes < totalBytes {
+            return String(format: "%.1f%%", min(99.9, percent))
         }
-        if completedBytes > 0 {
-            return "\(DownloadByteFormat.bytes(completedBytes)) downloaded"
-        }
-        return ""
+        return "\(min(99, Int(percent.rounded())))%"
     }
 
     var speedText: String? {
@@ -85,6 +92,25 @@ enum DownloadByteFormat {
 
     static func bytes(_ value: Int64) -> String {
         formatter.string(fromByteCount: max(0, value))
+    }
+
+    static func progress(completed: Int64, total: Int64, downloading: Bool) -> String {
+        if total > 0, completed >= total, downloading {
+            return "\(bytes(completed))+ downloaded"
+        }
+        if total > 0 {
+            let remaining = max(0, total - completed)
+            let completedText = bytes(completed)
+            let totalText = bytes(total)
+            if remaining > 0, remaining < 150_000_000 || completedText == totalText {
+                return "\(completedText) of \(totalText) · \(bytes(remaining)) left"
+            }
+            return "\(completedText) of \(totalText)"
+        }
+        if completed > 0 {
+            return "\(bytes(completed)) downloaded"
+        }
+        return ""
     }
 
     static func speed(_ bytesPerSec: Double?) -> String? {
@@ -455,7 +481,11 @@ private struct DownloadProgressSmoother {
         }
 
         var nextCompleted = max(0, completed)
-        if nextCompleted >= maxCompleted {
+        if nextCompleted + 1_048_576 < maxCompleted {
+            maxCompleted = nextCompleted
+            samples.removeAll()
+            lastPositiveRate = nil
+        } else if nextCompleted >= maxCompleted {
             maxCompleted = nextCompleted
         }
         // Catalog sizes are a lower bound. If observed bytes pass the estimate,
@@ -480,7 +510,7 @@ private struct DownloadProgressSmoother {
             }
         }
         if rate == nil, let lastPositiveRate, lastPositiveRate >= 1024,
-           let lastSample = samples.last, now.timeIntervalSince(lastSample.time) < 2.5 {
+           let lastSample = samples.last, now.timeIntervalSince(lastSample.time) < 1.2 {
             rate = lastPositiveRate
         }
         if let current = rate, current < 1024 {

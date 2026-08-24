@@ -197,11 +197,11 @@ struct ChatListView: View {
                 }
             }
             .sheet(isPresented: $showingSettings) {
-                GlobalSettingsView(chatManager: chatManager)
+                ModelPickerView(chatManager: chatManager, scope: .defaults, navigationTitle: "Settings")
             }
             .sheet(isPresented: $showingModelPicker) {
                 if #available(iOS 27, *) {
-                    ModelPickerView(chatManager: chatManager)
+                    ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
                 }
             }
             .onChange(of: selectedChatId) { _, newId in
@@ -274,11 +274,11 @@ struct ChatListView: View {
             }
         }
         .sheet(isPresented: $showingSettings) {
-            GlobalSettingsView(chatManager: chatManager)
+            ModelPickerView(chatManager: chatManager, scope: .defaults, navigationTitle: "Settings")
         }
         .sheet(isPresented: $showingModelPicker) {
             if #available(iOS 27, *) {
-                ModelPickerView(chatManager: chatManager)
+                ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
             }
         }
         .onChange(of: isSearchPresented) { _, presented in
@@ -503,8 +503,22 @@ struct ChatDetailView: View {
         self._chatTitle = State(initialValue: initialTitle)
     }
     
+    private var showsModelNameInNavigationBar: Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
+        UIDevice.current.userInterfaceIdiom == .phone
+        #endif
+    }
+
+    private var showsComposerModelPicker: Bool {
+        guard !showsModelNameInNavigationBar else { return false }
+        if #available(iOS 27, *) { return true }
+        return false
+    }
+
     var body: some View {
-        ChatView(chatManager: chatManager)
+        ChatView(chatManager: chatManager, showsComposerModelPicker: showsComposerModelPicker)
             .navigationBarBackButtonHidden(horizontalSizeClass == .regular)
             .navigationTitle(chatTitle)
             #if targetEnvironment(macCatalyst)
@@ -522,82 +536,32 @@ struct ChatDetailView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showingSettings = true }) {
-                        Image(systemName: "gear")
+                    if showsModelNameInNavigationBar {
+                        Button(action: { showingSettings = true }) {
+                            HStack(spacing: 3) {
+                                Text(chatManager.currentModel.displayName)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .frame(maxWidth: 160, alignment: .trailing)
+                                Image(systemName: "chevron.down")
+                                    .font(.caption2.weight(.semibold))
+                            }
+                            .font(.subheadline.weight(.medium))
+                        }
+                        .accessibilityLabel("Chat settings")
+                        .accessibilityValue(chatManager.currentModel.displayName)
+                    } else {
+                        Button(action: { showingSettings = true }) {
+                            Image(systemName: "gear")
+                        }
+                        #if targetEnvironment(macCatalyst)
+                        .help("Chat Settings")
+                        #endif
                     }
-                    #if targetEnvironment(macCatalyst)
-                    .help("Chat Settings")
-                    #endif
                 }
             }
             .sheet(isPresented: $showingSettings) {
-                SettingsView(
-                    systemPrompt: Binding(
-                        get: { chatManager.currentSystemPrompt },
-                        set: { applyChatSettings(systemPrompt: $0) }
-                    ),
-                    temperature: Binding(
-                        get: { chatManager.currentTemperature },
-                        set: { applyChatSettings(temperature: $0) }
-                    ),
-                    model: Binding(
-                        get: { chatManager.currentModel },
-                        set: { applyChatSettings(model: $0) }
-                    ),
-                    reasoningLevel: Binding(
-                        get: { chatManager.currentReasoningLevel },
-                        set: { applyChatSettings(reasoningLevel: $0) }
-                    ),
-                    thinkingEnabled: Binding(
-                        get: { chatManager.currentThinkingEnabled },
-                        set: { applyChatSettings(thinkingEnabled: $0) }
-                    ),
-                    thinkingBudgetTokens: Binding(
-                        get: { chatManager.currentThinkingBudgetTokens },
-                        set: { applyChatSettings(thinkingBudgetTokens: $0, updateThinkingBudget: true) }
-                    ),
-                    toolsEnabled: Binding(
-                        get: { chatManager.currentToolsEnabled },
-                        set: { applyChatSettings(toolsEnabled: $0) }
-                    ),
-                    toolCodeInterpreterEnabled: Binding(
-                        get: { chatManager.currentChat?.toolCodeInterpreterEnabled ?? true },
-                        set: { newValue in
-                            applyChatSettings(perTools: (
-                                code: newValue,
-                                webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
-                                webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
-                            ))
-                        }
-                    ),
-                    toolWebSearchEnabled: Binding(
-                        get: { chatManager.currentChat?.toolWebSearchEnabled ?? true },
-                        set: { newValue in
-                            applyChatSettings(perTools: (
-                                code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                webSearch: newValue,
-                                webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
-                            ))
-                        }
-                    ),
-                    toolWebFetchEnabled: Binding(
-                        get: { chatManager.currentChat?.toolWebFetchEnabled ?? true },
-                        set: { newValue in
-                            applyChatSettings(perTools: (
-                                code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
-                                webFetch: newValue
-                            ))
-                        }
-                    ),
-                    appendDateToSystemPrompt: Binding(
-                        get: { chatManager.currentAppendDateToSystemPrompt },
-                        set: { applyChatSettings(appendDateToSystemPrompt: $0) }
-                    ),
-                    isSettingsEditable: !chatManager.isLoading,
-                    hasConversationHistory: !chatManager.currentMessages.isEmpty,
-                    onSave: { }
-                )
+                ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Settings")
             }
             .onAppear {
                 activateChat(chatId)
@@ -611,31 +575,6 @@ struct ChatDetailView: View {
                     chatTitle = newTitle
                 }
             }
-    }
-    
-    private func applyChatSettings(
-        systemPrompt: String? = nil,
-        temperature: Double? = nil,
-        model: LLMModelChoice? = nil,
-        reasoningLevel: LLMReasoningLevel? = nil,
-        toolsEnabled: Bool? = nil,
-        appendDateToSystemPrompt: Bool? = nil,
-        perTools: (code: Bool, webSearch: Bool, webFetch: Bool)? = nil,
-        thinkingEnabled: Bool? = nil,
-        thinkingBudgetTokens: Int? = nil,
-        updateThinkingBudget: Bool = false
-    ) {
-        chatManager.updateChatSettings(
-            systemPrompt: systemPrompt ?? chatManager.currentSystemPrompt,
-            temperature: temperature ?? chatManager.currentTemperature,
-            model: model ?? chatManager.currentModel,
-            reasoningLevel: reasoningLevel ?? chatManager.currentReasoningLevel,
-            toolsEnabled: toolsEnabled ?? chatManager.currentToolsEnabled,
-            appendDateToSystemPrompt: appendDateToSystemPrompt ?? chatManager.currentAppendDateToSystemPrompt,
-            perTools: perTools,
-            thinkingEnabled: thinkingEnabled ?? chatManager.currentThinkingEnabled,
-            thinkingBudgetTokens: updateThinkingBudget ? thinkingBudgetTokens : chatManager.currentThinkingBudgetTokens
-        )
     }
 
     private func activateChat(_ id: UUID) {
@@ -652,174 +591,6 @@ struct ChatDetailView: View {
         }
         
         chatManager.refreshContextWindowMetadata()
-    }
-}
-
-struct GlobalSettingsView: View {
-    @ObservedObject var chatManager: ChatManager
-    @Environment(\.dismiss) private var dismiss
-    @State private var defaultPrompt: String = ""
-    @State private var defaultTemperature: Double = 1.0
-    @State private var defaultModel: LLMModelChoice = .onDevice
-    @State private var defaultReasoningLevel: LLMReasoningLevel = .moderate
-    @State private var defaultThinkingEnabled: Bool = true
-    @State private var defaultThinkingBudgetTokens: Int? = nil
-    @State private var defaultToolsEnabled: Bool = true
-    @State private var defaultToolCodeInterpreterEnabled: Bool = true
-    @State private var defaultToolWebSearchEnabled: Bool = true
-    @State private var defaultToolWebFetchEnabled: Bool = true
-    @State private var defaultAppendDateToSystemPrompt: Bool = true
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Default Settings for New Chats")) {
-                    Text("These settings will be used when creating new chats.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("System Prompt")
-                        .font(.headline)
-                    TextEditor(text: $defaultPrompt)
-                        .frame(minHeight: 100)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-
-                    Toggle("Append today's date", isOn: $defaultAppendDateToSystemPrompt)
-
-                    Text("When enabled, adds the current date to the end of the system prompt sent to the model.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    if AFMModelCatalog.supportsReasoning(defaultModel) {
-                        if AFMModelCatalog.usesAppleReasoningLevels(defaultModel) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Picker("Reasoning Level", selection: $defaultReasoningLevel) {
-                                    ForEach(LLMReasoningLevel.allCases) { level in
-                                        Text(level.displayName).tag(level)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
-
-                                Text(defaultReasoningLevel.description)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        } else {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Toggle("Thinking", isOn: $defaultThinkingEnabled)
-                                    .disabled(!AFMModelCatalog.mlxCanDisableThinking(defaultModel))
-
-                                if !AFMModelCatalog.mlxCanDisableThinking(defaultModel) {
-                                    Text("This model always thinks and cannot turn it off.")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                if AFMModelCatalog.mlxSupportsThinkingBudget(defaultModel),
-                                   defaultThinkingEnabled || !AFMModelCatalog.mlxCanDisableThinking(defaultModel) {
-                                    Picker("Thinking Budget", selection: $defaultThinkingBudgetTokens) {
-                                        Text("Unlimited").tag(Optional<Int>.none)
-                                        ForEach(LLMThinkingBudget.presets, id: \.self) { tokens in
-                                            Text("\(tokens) tokens").tag(Optional(tokens))
-                                        }
-                                    }
-                                    Text("Caps how many tokens the model may spend thinking before it answers.")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Temperature: \(defaultTemperature, specifier: "%.1f")")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        Slider(value: $defaultTemperature, in: 0.0...2.0, step: 0.1)
-                    }
-                }
-                
-                Section(header: Text("Tools")) {
-                    Toggle("Enable Tools", isOn: $defaultToolsEnabled)
-                        .toggleStyle(SwitchToggleStyle())
-                    
-                    if defaultToolsEnabled {
-                        Toggle(isOn: $defaultToolCodeInterpreterEnabled) {
-                            HStack {
-                                Image(systemName: "gear").foregroundColor(.blue)
-                                Text("Code Interpreter")
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                        Toggle(isOn: $defaultToolWebSearchEnabled) {
-                            HStack {
-                                Image(systemName: "magnifyingglass").foregroundColor(.orange)
-                                Text("Web Search")
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                        Toggle(isOn: $defaultToolWebFetchEnabled) {
-                            HStack {
-                                Image(systemName: "doc.text").foregroundColor(.green)
-                                Text("Web Fetch")
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                    }
-                }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        UserDefaults.standard.set(defaultPrompt, forKey: "systemPrompt")
-                        UserDefaults.standard.set(defaultTemperature, forKey: "temperature")
-                        UserDefaults.standard.set(defaultReasoningLevel.rawValue, forKey: "reasoningLevel")
-                        UserDefaults.standard.set(defaultThinkingEnabled, forKey: "thinkingEnabled")
-                        if let defaultThinkingBudgetTokens, defaultThinkingBudgetTokens > 0 {
-                            UserDefaults.standard.set(defaultThinkingBudgetTokens, forKey: "thinkingBudgetTokens")
-                        } else {
-                            UserDefaults.standard.removeObject(forKey: "thinkingBudgetTokens")
-                        }
-                        UserDefaults.standard.set(defaultToolsEnabled, forKey: "toolsEnabled")
-                        UserDefaults.standard.set(defaultToolCodeInterpreterEnabled, forKey: "toolCodeInterpreterEnabled")
-                        UserDefaults.standard.set(defaultToolWebSearchEnabled, forKey: "toolWebSearchEnabled")
-                        UserDefaults.standard.set(defaultToolWebFetchEnabled, forKey: "toolWebFetchEnabled")
-                        UserDefaults.standard.set(defaultAppendDateToSystemPrompt, forKey: "appendDateToSystemPrompt")
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .onAppear {
-            defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
-            defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
-            defaultModel = LLMModelChoice(
-                rawValue: UserDefaults.standard.string(forKey: "model") ?? LLMModelChoice.onDevice.rawValue
-            ) ?? .onDevice
-            defaultReasoningLevel = LLMReasoningLevel(
-                rawValue: UserDefaults.standard.string(forKey: "reasoningLevel") ?? LLMReasoningLevel.moderate.rawValue
-            ) ?? .moderate
-            defaultThinkingEnabled = UserDefaults.standard.object(forKey: "thinkingEnabled") as? Bool ?? true
-            let storedBudget = UserDefaults.standard.object(forKey: "thinkingBudgetTokens") as? Int
-            defaultThinkingBudgetTokens = (storedBudget ?? 0) > 0 ? storedBudget : nil
-            defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
-            defaultToolCodeInterpreterEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
-            defaultToolWebSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
-            defaultToolWebFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
-            defaultAppendDateToSystemPrompt = UserDefaults.standard.object(forKey: "appendDateToSystemPrompt") as? Bool ?? true
-        }
     }
 }
 

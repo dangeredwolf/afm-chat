@@ -167,15 +167,6 @@ enum HuggingFaceModelCatalog {
         return lowered.contains("gemma-4") || lowered.contains("gemma4")
     }
 
-    nonisolated static func looksLikeReasoning(id: String, tags: [String] = []) -> Bool {
-        if looksLikeGemma4(id: id) {
-            return true
-        }
-        let haystack = ([id] + tags).joined(separator: " ").lowercased()
-        let markers = ["thinking", "reason", "r1", "qwq", "deepseek-r", "qwen3"]
-        return markers.contains(where: { haystack.contains($0) })
-    }
-
     /// DeepSeek-R1 and distills cannot turn thinking off.
     nonisolated static func looksLikeAlwaysOnReasoning(id: String) -> Bool {
         let lowered = id.lowercased()

@@ -2,16 +2,49 @@ import SwiftUI
 
 struct ModelPickerView: View {
     @ObservedObject var chatManager: ChatManager
+    var scope: ChatSettingsScope = .currentChat
+    var navigationTitle: String = "Models"
+
     @ObservedObject private var downloadedStore = DownloadedModelStore.shared
     @ObservedObject private var downloads = ModelDownloadManager.shared
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var draft: ChatSettingsDraft
     @State private var showingAddModel = false
     @State private var cachedOptions: [LLMModelOption] = []
     @State private var modelPendingDelete: DownloadedMLXModel?
 
+    init(
+        chatManager: ChatManager,
+        scope: ChatSettingsScope = .currentChat,
+        navigationTitle: String = "Models"
+    ) {
+        _chatManager = ObservedObject(wrappedValue: chatManager)
+        self.scope = scope
+        self.navigationTitle = navigationTitle
+        _draft = StateObject(wrappedValue: ChatSettingsDraft(chatManager: chatManager, scope: scope))
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    NavigationLink {
+                        ModelSettingsView(chatManager: chatManager, draft: draft)
+                    } label: {
+                        Label("Model Settings", systemImage: "slider.horizontal.3")
+                    }
+
+                    NavigationLink {
+                        ToolsSettingsView(chatManager: chatManager, draft: draft)
+                    } label: {
+                        Label("Tools", systemImage: "wrench.and.screwdriver")
+                    }
+                } footer: {
+                    if scope == .defaults {
+                        Text("These settings will be used when creating new chats.")
+                    }
+                }
+
                 Section {
                     ForEach(appleOptions) { option in
                         modelRow(for: option)
@@ -59,7 +92,7 @@ struct ModelPickerView: View {
                     #endif
                 }
             }
-            .navigationTitle("Models")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -96,6 +129,9 @@ struct ModelPickerView: View {
                 refreshOptions()
                 downloadedStore.refresh()
             }
+            .onDisappear {
+                draft.persistIfNeeded()
+            }
             .onChange(of: downloadedStore.models) { _, _ in
                 refreshOptions()
             }
@@ -106,6 +142,14 @@ struct ModelPickerView: View {
         cachedOptions.filter { $0.choice.mlxModelID == nil }
     }
 
+    private var selectedModel: LLMModelChoice {
+        draft.model
+    }
+
+    private var canChangeModel: Bool {
+        draft.isEditable
+    }
+
     private func refreshOptions() {
         cachedOptions = AFMModelCatalog.modelOptions()
     }
@@ -113,8 +157,8 @@ struct ModelPickerView: View {
     @ViewBuilder
     private func modelRow(for option: LLMModelOption) -> some View {
         Button {
-            guard option.isAvailable, !chatManager.isLoading else { return }
-            chatManager.selectModel(option.choice)
+            guard option.isAvailable, canChangeModel else { return }
+            draft.applySelectedModel(option.choice)
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 leadingIcon(for: option.choice, displayName: option.displayName)
@@ -131,7 +175,7 @@ struct ModelPickerView: View {
                     }
                 }
                 Spacer()
-                if chatManager.currentModel == option.choice {
+                if selectedModel == option.choice {
                     Image(systemName: "checkmark")
                         .fontWeight(.semibold)
                         .foregroundStyle(.tint)
@@ -140,7 +184,7 @@ struct ModelPickerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!option.isAvailable || chatManager.isLoading)
+        .disabled(!option.isAvailable || !canChangeModel)
     }
 
     @ViewBuilder
@@ -185,8 +229,8 @@ struct ModelPickerView: View {
         let isAvailable = option?.isAvailable ?? HuggingFaceCache.isDownloaded(model.id)
 
         Button {
-            guard isAvailable, !chatManager.isLoading else { return }
-            chatManager.selectModel(choice)
+            guard isAvailable, canChangeModel else { return }
+            draft.applySelectedModel(choice)
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 if let lab = ModelLab.infer(from: model.displayName, model.id) {
@@ -207,7 +251,7 @@ struct ModelPickerView: View {
                     }
                 }
                 Spacer()
-                if chatManager.currentModel == choice {
+                if selectedModel == choice {
                     Image(systemName: "checkmark")
                         .fontWeight(.semibold)
                         .foregroundStyle(.tint)
@@ -216,7 +260,7 @@ struct ModelPickerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!isAvailable || chatManager.isLoading)
+        .disabled(!isAvailable || !canChangeModel)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 modelPendingDelete = model
@@ -242,6 +286,9 @@ struct ModelPickerView: View {
         Task {
             await downloadedStore.remove(model.id)
             chatManager.resetChats(usingDeletedModel: model.id)
+            if draft.model.mlxModelID == model.id {
+                draft.applySelectedModel(.onDevice)
+            }
             modelPendingDelete = nil
         }
     }

@@ -84,12 +84,9 @@ enum AFMModelCatalog {
             return false
         case .privateCloudCompute:
             return AFMEntitlements.hasPrivateCloudCompute
-        case .mlx(let id):
+        case .mlx:
             #if AFM_MLX
-            let tags = DownloadedModelStore.storedModels().first(where: { $0.id == id }).map { model in
-                [model.pipelineTag].compactMap { $0 }
-            } ?? []
-            return HuggingFaceModelCatalog.looksLikeReasoning(id: id, tags: tags)
+            return true
             #else
             return false
             #endif
@@ -108,8 +105,7 @@ enum AFMModelCatalog {
 
     static func mlxCanDisableThinking(_ choice: LLMModelChoice) -> Bool {
         guard case .mlx(let id) = choice else { return false }
-        return HuggingFaceModelCatalog.looksLikeReasoning(id: id)
-            && !HuggingFaceModelCatalog.looksLikeAlwaysOnReasoning(id: id)
+        return !HuggingFaceModelCatalog.looksLikeAlwaysOnReasoning(id: id)
     }
 
     static func mlxSupportsThinkingBudget(_ choice: LLMModelChoice) -> Bool {

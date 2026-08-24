@@ -611,4 +611,86 @@ struct Chat: Identifiable, Codable {
     }
 }
 
+enum ChatSettingsScope {
+    case currentChat
+    case defaults
+}
+
+struct ChatSettingsValues: Equatable {
+    var systemPrompt: String
+    var temperature: Double
+    var model: LLMModelChoice
+    var reasoningLevel: LLMReasoningLevel
+    var thinkingEnabled: Bool
+    var thinkingBudgetTokens: Int?
+    var toolsEnabled: Bool
+    var toolCodeInterpreterEnabled: Bool
+    var toolWebSearchEnabled: Bool
+    var toolWebFetchEnabled: Bool
+    var appendDateToSystemPrompt: Bool
+
+    init(
+        systemPrompt: String,
+        temperature: Double,
+        model: LLMModelChoice,
+        reasoningLevel: LLMReasoningLevel,
+        thinkingEnabled: Bool,
+        thinkingBudgetTokens: Int?,
+        toolsEnabled: Bool,
+        toolCodeInterpreterEnabled: Bool,
+        toolWebSearchEnabled: Bool,
+        toolWebFetchEnabled: Bool,
+        appendDateToSystemPrompt: Bool
+    ) {
+        self.systemPrompt = systemPrompt
+        self.temperature = temperature
+        self.model = model
+        self.reasoningLevel = reasoningLevel
+        self.thinkingEnabled = thinkingEnabled
+        self.thinkingBudgetTokens = thinkingBudgetTokens
+        self.toolsEnabled = toolsEnabled
+        self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
+        self.toolWebSearchEnabled = toolWebSearchEnabled
+        self.toolWebFetchEnabled = toolWebFetchEnabled
+        self.appendDateToSystemPrompt = appendDateToSystemPrompt
+    }
+
+    init(from chat: Chat) {
+        self.init(
+            systemPrompt: chat.systemPrompt,
+            temperature: chat.temperature,
+            model: chat.model,
+            reasoningLevel: chat.reasoningLevel,
+            thinkingEnabled: chat.thinkingEnabled,
+            thinkingBudgetTokens: chat.thinkingBudgetTokens,
+            toolsEnabled: chat.toolsEnabled,
+            toolCodeInterpreterEnabled: chat.toolCodeInterpreterEnabled,
+            toolWebSearchEnabled: chat.toolWebSearchEnabled,
+            toolWebFetchEnabled: chat.toolWebFetchEnabled,
+            appendDateToSystemPrompt: chat.appendDateToSystemPrompt
+        )
+    }
+
+    static func fromUserDefaults(_ defaults: UserDefaults = .standard) -> ChatSettingsValues {
+        let storedBudget = defaults.object(forKey: "thinkingBudgetTokens") as? Int
+        return ChatSettingsValues(
+            systemPrompt: defaults.string(forKey: "systemPrompt") ?? "You are a helpful assistant.",
+            temperature: defaults.object(forKey: "temperature") as? Double ?? 1.0,
+            model: LLMModelChoice(
+                rawValue: defaults.string(forKey: "model") ?? LLMModelChoice.onDevice.rawValue
+            ) ?? .onDevice,
+            reasoningLevel: LLMReasoningLevel(
+                rawValue: defaults.string(forKey: "reasoningLevel") ?? LLMReasoningLevel.moderate.rawValue
+            ) ?? .moderate,
+            thinkingEnabled: defaults.object(forKey: "thinkingEnabled") as? Bool ?? true,
+            thinkingBudgetTokens: (storedBudget ?? 0) > 0 ? storedBudget : nil,
+            toolsEnabled: defaults.object(forKey: "toolsEnabled") as? Bool ?? false,
+            toolCodeInterpreterEnabled: defaults.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true,
+            toolWebSearchEnabled: defaults.object(forKey: "toolWebSearchEnabled") as? Bool ?? true,
+            toolWebFetchEnabled: defaults.object(forKey: "toolWebFetchEnabled") as? Bool ?? true,
+            appendDateToSystemPrompt: defaults.object(forKey: "appendDateToSystemPrompt") as? Bool ?? true
+        )
+    }
+}
+
  

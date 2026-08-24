@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
 
 struct ChatView: View {
     @StateObject var chatManager: ChatManager
+    var showsComposerModelPicker: Bool = false
     @FocusState private var isInputFocused: Bool
     @State private var showPhotoPicker = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
@@ -21,8 +22,9 @@ struct ChatView: View {
     @State private var speechInputManager: SpeechInputManager?
     @State private var showingModelPicker = false
     
-    init(chatManager: ChatManager) {
+    init(chatManager: ChatManager, showsComposerModelPicker: Bool = false) {
         _chatManager = StateObject(wrappedValue: chatManager)
+        self.showsComposerModelPicker = showsComposerModelPicker
     }
     
     var body: some View {
@@ -54,7 +56,7 @@ struct ChatView: View {
                                         Text("Reasoning: \(chatManager.currentReasoningLevel.displayName)")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
-                                    } else if AFMModelCatalog.supportsReasoning(chatManager.currentModel) {
+                                    } else if chatManager.currentModel.mlxModelID != nil {
                                         Text(chatManager.currentThinkingEnabled ? "Thinking: On" : "Thinking: Off")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
@@ -200,10 +202,7 @@ struct ChatView: View {
                 onRemoveAttachment: { attachmentId in
                     chatManager.removePendingAttachment(attachmentId)
                 },
-                showsModelPicker: {
-                    if #available(iOS 27, *) { return true }
-                    return false
-                }(),
+                showsModelPicker: showsComposerModelPicker,
                 modelLabel: chatManager.currentModel.composerLabel,
                 onModelTap: {
                     showingModelPicker = true
@@ -248,7 +247,7 @@ struct ChatView: View {
         #endif
         .sheet(isPresented: $showingModelPicker) {
             if #available(iOS 27, *) {
-                ModelPickerView(chatManager: chatManager)
+                ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
             }
         }
         .onAppear {

@@ -9,19 +9,69 @@ import SwiftUI
 import MarkdownUI
 import UIKit
 
+private struct DisclosureHeader: View, Equatable {
+    let title: String
+    var qualifier: String? = nil
+    let isExpanded: Bool
+    var showsChevron: Bool = true
+    var isFailed: Bool = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(isFailed ? Color.red.opacity(0.85) : Color.secondary)
+
+            if let qualifier, !qualifier.isEmpty {
+                Text(qualifier)
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            }
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+}
+
 struct ReasoningView: View {
     let reasoningContent: String?
     let reasoningDuration: TimeInterval?
-    let reasoningTokenCount: Int?
-    let isStreaming: Bool
     let isThinkingActive: Bool
     let maxWidth: CGFloat
-    @State private var thinkingStartDate: Date?
     @State private var isExpanded = false
 
     private var hasExpandableContent: Bool {
         guard let reasoningContent else { return false }
         return !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var headerTitle: String {
+        isThinkingActive ? "Thinking" : "Thought"
+    }
+
+    private var headerQualifier: String? {
+        guard !isThinkingActive, let duration = reasoningDuration, duration >= 0 else {
+            return nil
+        }
+        if duration < 2 {
+            return "briefly"
+        }
+        return "for \(formatThinkingDuration(duration))"
+    }
+
+    private var accessibilityTitle: String {
+        if let qualifier = headerQualifier {
+            return "\(headerTitle) \(qualifier)"
+        }
+        return headerTitle
     }
 
     private func formatThinkingDuration(_ seconds: TimeInterval) -> String {
@@ -36,141 +86,37 @@ struct ReasoningView: View {
         return "\(minutes)m \(remainingSeconds)s"
     }
 
-    private func elapsedDuration(at date: Date) -> TimeInterval? {
-        guard let thinkingStartDate else { return reasoningDuration }
-        return date.timeIntervalSince(thinkingStartDate)
-    }
-
-    private func durationLabel(at date: Date) -> String? {
-        let elapsed: TimeInterval?
-        if isThinkingActive {
-            elapsed = elapsedDuration(at: date)
-        } else {
-            elapsed = reasoningDuration
-        }
-        guard let elapsed, elapsed >= 0, elapsed > 0 || isThinkingActive else { return nil }
-        return formatThinkingDuration(elapsed)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 guard hasExpandableContent else { return }
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                 }
             } label: {
-                HStack(spacing: 8) {
-                    if isStreaming && isThinkingActive {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                            .frame(width: 16, height: 16)
-                    } else {
-                        Image(systemName: "brain.head.profile")
-                            .foregroundColor(.purple)
-                            .frame(width: 16, height: 16)
-                    }
-
-                    Group {
-                        if isThinkingActive {
-                            TimelineView(.periodic(from: .now, by: 0.1)) { context in
-                                reasoningHeader(durationLabel: durationLabel(at: context.date))
-                            }
-                        } else {
-                            reasoningHeader(durationLabel: durationLabel(at: .now))
-                        }
-                    }
-
-                    if hasExpandableContent {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                DisclosureHeader(
+                    title: headerTitle,
+                    qualifier: headerQualifier,
+                    isExpanded: isExpanded,
+                    showsChevron: hasExpandableContent
+                )
             }
             .buttonStyle(.plain)
             .disabled(!hasExpandableContent)
+            .accessibilityLabel(accessibilityTitle)
+            .accessibilityHint(isExpanded ? "Collapse thinking" : "Expand thinking")
+            .accessibilityAddTraits(.isButton)
 
             if isExpanded, hasExpandableContent, let reasoningContent {
-                Divider()
-                    .padding(.horizontal, 12)
-
                 Markdown(reasoningContent)
                     .markdownTextStyle(\.text) {
                         FontSize(.em(0.85))
                         ForegroundColor(.secondary)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .frame(maxWidth: maxWidth, alignment: .leading)
             }
         }
-        .frame(maxWidth: isExpanded && hasExpandableContent ? maxWidth : nil, alignment: .leading)
-        .fixedSize(horizontal: !(isExpanded && hasExpandableContent), vertical: false)
-        .background(Color.purple.opacity(0.05))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.purple.opacity(0.25), lineWidth: 1)
-        )
-        .onAppear {
-            syncThinkingStartDate()
-            if isThinkingActive && hasExpandableContent {
-                isExpanded = true
-            }
-        }
-        .onChange(of: isThinkingActive) { _, active in
-            syncThinkingStartDate()
-            if active && hasExpandableContent {
-                isExpanded = true
-            }
-        }
-        .onChange(of: reasoningDuration) { _, _ in
-            syncThinkingStartDate()
-        }
-        .onChange(of: hasExpandableContent) { _, hasContent in
-            if isThinkingActive && hasContent {
-                isExpanded = true
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func reasoningHeader(durationLabel: String?) -> some View {
-        HStack(spacing: 4) {
-            Text("Thinking")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
-
-            if isThinkingActive {
-                Text("...")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            if let durationLabel {
-                Text("(\(durationLabel))")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-
-            if let reasoningTokenCount, reasoningTokenCount > 0 {
-                Text("· \(reasoningTokenCount) token\(reasoningTokenCount == 1 ? "" : "s")")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-
-    private func syncThinkingStartDate() {
-        if isThinkingActive {
-            thinkingStartDate = Date().addingTimeInterval(-(reasoningDuration ?? 0))
-        } else {
-            thinkingStartDate = nil
-        }
+        .frame(maxWidth: maxWidth, alignment: .leading)
     }
 }
 
@@ -179,8 +125,12 @@ struct ToolCallView: View {
     let maxWidth: CGFloat
     @State private var isExpanded = false
 
+    private var headerTitle: String {
+        toolCallTitle(name: toolCall.toolName, status: toolCall.status)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
@@ -194,37 +144,40 @@ struct ToolCallView: View {
                 .equatable()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(headerTitle)
+            .accessibilityHint(isExpanded ? "Collapse details" : "Expand details")
+            .accessibilityAddTraits(.isButton)
 
             if isExpanded {
                 ToolCallExpandedContent(toolCall: toolCall)
+                    .frame(maxWidth: maxWidth, alignment: .leading)
             }
         }
-        .frame(maxWidth: isExpanded ? maxWidth : nil, alignment: .leading)
-        .fixedSize(horizontal: !isExpanded, vertical: false)
-        .background(backgroundColorForStatus(toolCall.status))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(colorForStatus(toolCall.status).opacity(0.3), lineWidth: 1)
-        )
+        .frame(maxWidth: maxWidth, alignment: .leading)
     }
+}
 
-    private func colorForStatus(_ status: ToolCallStatus) -> Color {
-        switch status {
-        case .pending: return .orange
-        case .executing: return .blue
-        case .completed: return .green
-        case .failed: return .red
-        }
-    }
+private func toolCallTitle(name: String, status: ToolCallStatus) -> String {
+    let key = name.lowercased()
+    let inProgress = status == .pending || status == .executing
+    let failed = status == .failed
 
-    private func backgroundColorForStatus(_ status: ToolCallStatus) -> Color {
-        switch status {
-        case .pending: return .orange.opacity(0.05)
-        case .executing: return .blue.opacity(0.05)
-        case .completed: return .green.opacity(0.05)
-        case .failed: return .red.opacity(0.05)
-        }
+    switch key {
+    case "web search", "websearch":
+        if failed { return "Search failed" }
+        return inProgress ? "Searching the web" : "Searched the web"
+    case "web fetch", "webfetch":
+        if failed { return "Couldn't read page" }
+        return inProgress ? "Reading page" : "Read page"
+    case "code interpreter", "codeinterpreter", "javascript":
+        if failed { return "Code failed" }
+        return inProgress ? "Running code" : "Ran code"
+    case "read attachment", "readattachment":
+        if failed { return "Couldn't read file" }
+        return inProgress ? "Reading file" : "Read file"
+    default:
+        if failed { return "\(name) failed" }
+        return inProgress ? "Using \(name)" : "Used \(name)"
     }
 }
 
@@ -234,62 +187,11 @@ private struct ToolCallHeaderView: View, Equatable {
     let isExpanded: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
-            Group {
-                if status == .executing || status == .pending {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .frame(width: 16, height: 16)
-                } else {
-                    Image(systemName: status.systemIcon)
-                        .foregroundColor(colorForStatus(status))
-                        .frame(width: 16, height: 16)
-                }
-            }
-
-            HStack(spacing: 4) {
-                Text("Using")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Text(displayNameForTool(toolName))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-
-                if status == .executing || status == .pending {
-                    Text("...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .opacity(0.7)
-                }
-            }
-
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                .animation(.easeInOut(duration: 0.2), value: isExpanded)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private func colorForStatus(_ status: ToolCallStatus) -> Color {
-        switch status {
-        case .pending: return .orange
-        case .executing: return .blue
-        case .completed: return .green
-        case .failed: return .red
-        }
-    }
-
-    private func displayNameForTool(_ toolName: String) -> String {
-        switch toolName.lowercased() {
-        case "websearch": return "Web Search"
-        case "calculator": return "Calculator"
-        default: return toolName.capitalized
-        }
+        DisclosureHeader(
+            title: toolCallTitle(name: toolName, status: status),
+            isExpanded: isExpanded,
+            isFailed: status == .failed
+        )
     }
 }
 
@@ -298,84 +200,26 @@ private struct ToolCallExpandedContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Divider()
-                .padding(.horizontal, 12)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Description:")
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                Text(toolCall.toolDescription)
-                    .font(.caption2)
-                    .foregroundColor(.primary)
+            if !toolCall.arguments.isEmpty {
+                Text(formatArguments(toolCall.arguments))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-
-                if !toolCall.arguments.isEmpty {
-                    HStack {
-                        Text("Arguments:")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                    }
-                    .padding(.top, 4)
-
-                    Text(formatArguments(toolCall.arguments))
-                        .font(.caption2)
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if toolCall.status == .completed, let result = toolCall.result, !result.isEmpty {
-                    HStack {
-                        Text("Result:")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                    }
-                    .padding(.top, 4)
-
-                    Text(result)
-                        .font(.caption2)
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.green.opacity(0.1))
-                        .cornerRadius(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if toolCall.status == .failed, let error = toolCall.error {
-                    HStack {
-                        Text("Error:")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.red)
-                        Spacer()
-                    }
-                    .padding(.top, 4)
-
-                    Text(error)
-                        .font(.caption2)
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+
+            if let result = toolCall.result, !result.isEmpty, toolCall.status != .failed {
+                Text(result)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if toolCall.status == .failed, let error = toolCall.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -706,8 +550,6 @@ struct ChatBubble: View {
                         ReasoningView(
                             reasoningContent: message.reasoningContent,
                             reasoningDuration: message.reasoningDuration,
-                            reasoningTokenCount: message.reasoningTokenCount,
-                            isStreaming: isStreaming,
                             isThinkingActive: isStreaming
                                 && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                             maxWidth: maxBubbleWidth
@@ -716,7 +558,7 @@ struct ChatBubble: View {
                     }
 
                     if message.hasToolCalls {
-                        LazyVStack(alignment: .leading, spacing: 6) {
+                        LazyVStack(alignment: .leading, spacing: 4) {
                             ForEach(message.toolCalls) { toolCall in
                                 ToolCallView(toolCall: toolCall, maxWidth: maxBubbleWidth)
                                     .id(toolCall.id)
@@ -811,13 +653,15 @@ private struct StreamingStatusBubble: View {
         switch phase {
         case .loadingModel(let name, let fraction):
             if let fraction, fraction > 0, fraction < 1 {
-                return "Loading \(name)… \(Int((fraction * 100).rounded()))%"
+                return "Loading \(Int((fraction * 100).rounded()))%"
             }
-            return "Loading \(name)…"
+            return "Loading…"
         case .compiling(let name):
             return "Preparing \(name)…"
-        case .generating, .idle:
-            return "Generating…"
+        case .generating:
+            return "Loading…"
+        case .idle:
+            return "Waiting…"
         }
     }
 }

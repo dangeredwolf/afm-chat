@@ -55,7 +55,8 @@ nonisolated enum MLXTokenStream {
         )
         let container = try await model.loadContainer()
         let loadedConfig = await container.configuration.reasoningConfig
-        let reasoningConfig = resolveReasoningConfig(id: modelID, loaded: loadedConfig)
+        let resolvedReasoning = resolveReasoningConfig(id: modelID, loaded: loadedConfig)
+        let reasoningConfig = resolvedReasoning.config
         let thinkingOn = effectiveThinkingEnabled(
             requested: thinkingEnabled,
             config: reasoningConfig
@@ -95,13 +96,16 @@ nonisolated enum MLXTokenStream {
             )
         }
 
-        var emitter: ReasoningEventEmitter?
-        if let reasoningConfig {
-            emitter = ReasoningEventEmitter(
+        var emitter = ReasoningEventEmitter(
+            config: reasoningConfig,
+            primedInside: isPrimedInside(
+                thinkingEnabled: thinkingOn,
                 config: reasoningConfig,
-                primedInside: isPrimedInside(thinkingEnabled: thinkingOn, config: reasoningConfig)
+                knownProtocol: resolvedReasoning.knownProtocol
             )
-        }
+        )
+
+        continuation.yield(.generationStarted)
 
         var fullText = ""
         var reasoningText = ""
@@ -110,31 +114,25 @@ nonisolated enum MLXTokenStream {
             try Task.checkCancellation()
             switch generation {
             case .chunk(let chunk):
-                if var liveEmitter = emitter {
-                    let segments = liveEmitter.process(chunk)
-                    emitter = liveEmitter
-                    for segment in segments {
-                        switch segment {
-                        case .reasoning(let text):
-                            reasoningText += text
-                            reasoningTokenCount = tokenizer.encode(
-                                text: reasoningText,
-                                addSpecialTokens: false
-                            ).count
-                            continuation.yield(
-                                .reasoningUpdated(
-                                    content: reasoningText,
-                                    tokenCount: reasoningTokenCount
-                                )
+                let segments = emitter.process(chunk)
+                for segment in segments {
+                    switch segment {
+                    case .reasoning(let text):
+                        reasoningText += text
+                        reasoningTokenCount = tokenizer.encode(
+                            text: reasoningText,
+                            addSpecialTokens: false
+                        ).count
+                        continuation.yield(
+                            .reasoningUpdated(
+                                content: reasoningText,
+                                tokenCount: reasoningTokenCount
                             )
-                        case .response(let text):
-                            fullText += text
-                            continuation.yield(.contentUpdated(fullText: fullText))
-                        }
+                        )
+                    case .response(let text):
+                        fullText += text
+                        continuation.yield(.contentUpdated(fullText: fullText))
                     }
-                } else {
-                    fullText += chunk
-                    continuation.yield(.contentUpdated(fullText: fullText))
                 }
             case .info(let info):
                 if !reasoningText.isEmpty {
@@ -165,15 +163,13 @@ nonisolated enum MLXTokenStream {
             }
         }
 
-        if var liveEmitter = emitter {
-            let trailing = liveEmitter.finalize()
-            for segment in trailing {
-                switch segment {
-                case .reasoning(let text):
-                    reasoningText += text
-                case .response(let text):
-                    fullText += text
-                }
+        let trailing = emitter.finalize()
+        for segment in trailing {
+            switch segment {
+            case .reasoning(let text):
+                reasoningText += text
+            case .response(let text):
+                fullText += text
             }
         }
 
@@ -191,33 +187,38 @@ nonisolated enum MLXTokenStream {
         }
     }
 
+    private struct ResolvedReasoning {
+        let config: ReasoningConfig
+        let knownProtocol: Bool
+    }
+
     private static func resolveReasoningConfig(
         id: String,
         loaded: ReasoningConfig?
-    ) -> ReasoningConfig? {
+    ) -> ResolvedReasoning {
         if let loaded {
-            return loaded
+            return ResolvedReasoning(config: loaded, knownProtocol: true)
         }
         let modelType = HuggingFaceCache.modelType(for: id) ?? ""
         if let resolved = ChatConventionsRegistry.shared.reasoningConfig(
             modelId: id,
             modelType: modelType
         ) {
-            return resolved
+            return ResolvedReasoning(config: resolved, knownProtocol: true)
         }
         if HuggingFaceModelCatalog.looksLikeGemma4(id: id) {
-            return Gemma4Chat.reasoningConfig
+            return ResolvedReasoning(config: Gemma4Chat.reasoningConfig, knownProtocol: true)
         }
         if HuggingFaceModelCatalog.looksLikeAlwaysOnReasoning(id: id) {
-            return .alwaysOnThinking
+            return ResolvedReasoning(config: .alwaysOnThinking, knownProtocol: true)
         }
         if HuggingFaceModelCatalog.looksLikeBudgetedReasoning(id: id) {
-            return QwenReasoningProtocol.qwen3
+            return ResolvedReasoning(config: QwenReasoningProtocol.qwen3, knownProtocol: true)
         }
-        if HuggingFaceModelCatalog.looksLikeReasoning(id: id) {
-            return .thinkTagsWithEnableThinking
-        }
-        return nil
+        // Most chat models honor `<think>` tags and/or `enable_thinking`.
+        // Unknown families still get the settings; thinking is only shown
+        // in chat if the model actually emits it.
+        return ResolvedReasoning(config: .thinkTagsWithEnableThinking, knownProtocol: false)
     }
 
     private static func effectiveThinkingEnabled(
@@ -247,9 +248,10 @@ nonisolated enum MLXTokenStream {
 
     private static func isPrimedInside(
         thinkingEnabled: Bool,
-        config: ReasoningConfig
+        config: ReasoningConfig,
+        knownProtocol: Bool
     ) -> Bool {
-        guard thinkingEnabled else { return false }
+        guard thinkingEnabled, knownProtocol else { return false }
         switch config.promptStrategy {
         case .alwaysOn, .templateFlag:
             return true

@@ -146,18 +146,7 @@ private final class AFMSession: LLMSession {
             Task {
                 let toolCallEmitter = StreamToolCallEmitter()
                 ToolExecutionTracker.reset()
-                let pollingTask = Task {
-                    while !Task.isCancelled {
-                        let extracted = self.extractFromTranscript(preferredEntries: nil)
-                        if extracted.responseContent.count > self.lastMaxContentLength {
-                            self.lastMaxContentLength = extracted.responseContent.count
-                            continuation.yield(.contentUpdated(fullText: extracted.responseContent))
-                        }
-                        await toolCallEmitter.emitIfChanged(extracted.toolCalls, continuation: continuation)
-                        self.yieldReasoningUpdate(extracted.reasoningSnapshot, continuation: continuation)
-                        try? await Task.sleep(for: .milliseconds(50))
-                    }
-                }
+                var pollingTask: Task<Void, Never>?
 
                 do {
                     let supportsReasoning = AFMModelCatalog.supportsReasoning(configuration.model)
@@ -212,11 +201,29 @@ private final class AFMSession: LLMSession {
                         }
                     }
 
+                    continuation.yield(.generationStarted)
+                    pollingTask = Task {
+                        while !Task.isCancelled {
+                            let extracted = self.extractFromTranscript(preferredEntries: nil)
+                            let fullText = self.resolvedResponseText(
+                                transcriptContent: extracted.responseContent,
+                                snapshotContent: "",
+                                reasoningSnapshot: extracted.reasoningSnapshot
+                            )
+                            if fullText.count > self.lastMaxContentLength {
+                                self.lastMaxContentLength = fullText.count
+                                continuation.yield(.contentUpdated(fullText: fullText))
+                            }
+                            await toolCallEmitter.emitIfChanged(extracted.toolCalls, continuation: continuation)
+                            self.yieldReasoningUpdate(extracted.reasoningSnapshot, continuation: continuation)
+                            try? await Task.sleep(for: .milliseconds(50))
+                        }
+                    }
+
                     var bestContent = ""
                     for try await response in stream {
                         streamChunkIndex += 1
-                        if response.content.count > lastMaxContentLength {
-                            lastMaxContentLength = response.content.count
+                        if response.content.count > bestContent.count {
                             bestContent = response.content
                         }
 
@@ -242,15 +249,20 @@ private final class AFMSession: LLMSession {
                             reasoningTokenCount: streamReasoningTokenCount
                         )
 
-                        let fullText: String = extracted.responseContent.count >= bestContent.count
-                            ? extracted.responseContent
-                            : bestContent
+                        let fullText = resolvedResponseText(
+                            transcriptContent: extracted.responseContent,
+                            snapshotContent: bestContent,
+                            reasoningSnapshot: extracted.reasoningSnapshot
+                        )
+                        if fullText.count > lastMaxContentLength {
+                            lastMaxContentLength = fullText.count
+                        }
                         continuation.yield(.contentUpdated(fullText: fullText))
                         await toolCallEmitter.emitIfChanged(extracted.toolCalls, continuation: continuation)
                         yieldReasoningUpdate(extracted.reasoningSnapshot, continuation: continuation)
                     }
 
-                    pollingTask.cancel()
+                    pollingTask?.cancel()
 
                     let finalReasoningTokenCount: Int?
                     if #available(iOS 27, *), supportsReasoning {
@@ -277,7 +289,7 @@ private final class AFMSession: LLMSession {
 
                     continuation.finish()
                 } catch {
-                    pollingTask.cancel()
+                    pollingTask?.cancel()
                     if AFMModelCatalog.supportsReasoning(configuration.model) {
                         AFMReasoningProbe.log("stream error: \(error)")
                     }
@@ -298,6 +310,41 @@ private final class AFMSession: LLMSession {
             reasoningTokens: usage.output.reasoningTokenCount,
             model: configuration.model
         )
+    }
+
+    private func resolvedResponseText(
+        transcriptContent: String,
+        snapshotContent: String,
+        reasoningSnapshot: ReasoningSnapshot
+    ) -> String {
+        let transcript = transcriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !transcript.isEmpty {
+            if snapshotContent.count > transcriptContent.count,
+               !isReasoningLeak(snapshotContent, reasoningSnapshot: reasoningSnapshot) {
+                return snapshotContent
+            }
+            return transcriptContent
+        }
+
+        if isReasoningLeak(snapshotContent, reasoningSnapshot: reasoningSnapshot) {
+            return ""
+        }
+        return snapshotContent
+    }
+
+    private func isReasoningLeak(_ text: String, reasoningSnapshot: ReasoningSnapshot) -> Bool {
+        let snapshot = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if snapshot.isEmpty {
+            return true
+        }
+        if isPlaceholderReasoningText(snapshot) {
+            return true
+        }
+        guard let reasoning = reasoningSnapshot.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reasoning.isEmpty else {
+            return false
+        }
+        return snapshot == reasoning || reasoning.hasPrefix(snapshot) || snapshot.hasPrefix(reasoning)
     }
 
     private func yieldReasoningUpdate(

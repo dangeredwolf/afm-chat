@@ -289,34 +289,25 @@ class ChatManager: ObservableObject {
         return AFMModelCatalog.isModelAvailable(stored) ? stored : .onDevice
     }
 
-    func createNewChat() -> UUID {
-        // Get default settings from UserDefaults or use defaults
-        let defaultPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? "You are a helpful assistant."
-        let defaultTemperature = UserDefaults.standard.object(forKey: "temperature") as? Double ?? 1.0
-        let defaultModel = resolvedDefaultModel()
-        let defaultReasoningLevel = LLMReasoningLevel(
-            rawValue: UserDefaults.standard.string(forKey: "reasoningLevel") ?? LLMReasoningLevel.moderate.rawValue
-        ) ?? .moderate
-        let defaultThinkingEnabled = UserDefaults.standard.object(forKey: "thinkingEnabled") as? Bool ?? true
-        let storedBudget = UserDefaults.standard.object(forKey: "thinkingBudgetTokens") as? Int
-        let defaultThinkingBudget = (storedBudget ?? 0) > 0 ? storedBudget : nil
-        let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
-        let codeEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
-        let webSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
-        let webFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
-        let defaultAppendDate = UserDefaults.standard.object(forKey: "appendDateToSystemPrompt") as? Bool ?? true
+    private func defaultSettingsValues() -> ChatSettingsValues {
+        var values = ChatSettingsValues.fromUserDefaults()
+        values.model = resolvedDefaultModel()
+        return values
+    }
 
-        let newChat = Chat(systemPrompt: defaultPrompt,
-                           temperature: defaultTemperature,
-                           model: defaultModel,
-                           reasoningLevel: defaultReasoningLevel,
-                           thinkingEnabled: defaultThinkingEnabled,
-                           thinkingBudgetTokens: defaultThinkingBudget,
-                           toolsEnabled: defaultToolsEnabled,
-                           toolCodeInterpreterEnabled: codeEnabled,
-                           toolWebSearchEnabled: webSearchEnabled,
-                           toolWebFetchEnabled: webFetchEnabled,
-                           appendDateToSystemPrompt: defaultAppendDate)
+    func createNewChat() -> UUID {
+        let defaults = settingsValues(for: .defaults)
+        let newChat = Chat(systemPrompt: defaults.systemPrompt,
+                           temperature: defaults.temperature,
+                           model: defaults.model,
+                           reasoningLevel: defaults.reasoningLevel,
+                           thinkingEnabled: defaults.thinkingEnabled,
+                           thinkingBudgetTokens: defaults.thinkingBudgetTokens,
+                           toolsEnabled: defaults.toolsEnabled,
+                           toolCodeInterpreterEnabled: defaults.toolCodeInterpreterEnabled,
+                           toolWebSearchEnabled: defaults.toolWebSearchEnabled,
+                           toolWebFetchEnabled: defaults.toolWebFetchEnabled,
+                           appendDateToSystemPrompt: defaults.appendDateToSystemPrompt)
         
         // Store as temporary chat (not saved until first message)
         temporaryChat = newChat
@@ -382,7 +373,81 @@ class ChatManager: ObservableObject {
         recreateCurrentSession()
         refreshContextWindowMetadata()
         
-        // Also save as defaults
+        updateDefaultSettings(
+            systemPrompt: systemPrompt,
+            temperature: temperature,
+            model: model,
+            reasoningLevel: reasoningLevel,
+            toolsEnabled: toolsEnabled,
+            appendDateToSystemPrompt: appendDateToSystemPrompt,
+            perTools: perTools,
+            thinkingEnabled: thinkingEnabled,
+            thinkingBudgetTokens: thinkingBudgetTokens
+        )
+
+        saveChats()
+    }
+
+    func settingsValues(for scope: ChatSettingsScope) -> ChatSettingsValues {
+        switch scope {
+        case .currentChat:
+            if let chat = currentChat {
+                return ChatSettingsValues(from: chat)
+            }
+            return defaultSettingsValues()
+        case .defaults:
+            return defaultSettingsValues()
+        }
+    }
+
+    func persistSettings(_ values: ChatSettingsValues, scope: ChatSettingsScope) {
+        switch scope {
+        case .currentChat:
+            updateChatSettings(
+                systemPrompt: values.systemPrompt,
+                temperature: values.temperature,
+                model: values.model,
+                reasoningLevel: values.reasoningLevel,
+                toolsEnabled: values.toolsEnabled,
+                appendDateToSystemPrompt: values.appendDateToSystemPrompt,
+                perTools: (
+                    code: values.toolCodeInterpreterEnabled,
+                    webSearch: values.toolWebSearchEnabled,
+                    webFetch: values.toolWebFetchEnabled
+                ),
+                thinkingEnabled: values.thinkingEnabled,
+                thinkingBudgetTokens: values.thinkingBudgetTokens
+            )
+        case .defaults:
+            updateDefaultSettings(
+                systemPrompt: values.systemPrompt,
+                temperature: values.temperature,
+                model: values.model,
+                reasoningLevel: values.reasoningLevel,
+                toolsEnabled: values.toolsEnabled,
+                appendDateToSystemPrompt: values.appendDateToSystemPrompt,
+                perTools: (
+                    code: values.toolCodeInterpreterEnabled,
+                    webSearch: values.toolWebSearchEnabled,
+                    webFetch: values.toolWebFetchEnabled
+                ),
+                thinkingEnabled: values.thinkingEnabled,
+                thinkingBudgetTokens: values.thinkingBudgetTokens
+            )
+        }
+    }
+
+    func updateDefaultSettings(
+        systemPrompt: String,
+        temperature: Double,
+        model: LLMModelChoice,
+        reasoningLevel: LLMReasoningLevel,
+        toolsEnabled: Bool,
+        appendDateToSystemPrompt: Bool,
+        perTools: (code: Bool, webSearch: Bool, webFetch: Bool)? = nil,
+        thinkingEnabled: Bool,
+        thinkingBudgetTokens: Int?
+    ) {
         UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
         UserDefaults.standard.set(temperature, forKey: "temperature")
         UserDefaults.standard.set(model.rawValue, forKey: "model")
@@ -395,27 +460,29 @@ class ChatManager: ObservableObject {
         }
         UserDefaults.standard.set(toolsEnabled, forKey: "toolsEnabled")
         UserDefaults.standard.set(appendDateToSystemPrompt, forKey: "appendDateToSystemPrompt")
-        if let perTools = perTools {
+        if let perTools {
             UserDefaults.standard.set(perTools.code, forKey: "toolCodeInterpreterEnabled")
             UserDefaults.standard.set(perTools.webSearch, forKey: "toolWebSearchEnabled")
             UserDefaults.standard.set(perTools.webFetch, forKey: "toolWebFetchEnabled")
         }
-
-        saveChats()
-        prepareCurrentModelInBackground()
     }
 
-    func selectModel(_ model: LLMModelChoice) {
-        updateChatSettings(
-            systemPrompt: currentSystemPrompt,
-            temperature: currentTemperature,
-            model: model,
-            reasoningLevel: currentReasoningLevel,
-            toolsEnabled: currentToolsEnabled,
-            appendDateToSystemPrompt: currentAppendDateToSystemPrompt,
-            thinkingEnabled: currentThinkingEnabled,
-            thinkingBudgetTokens: currentThinkingBudgetTokens
-        )
+    func selectModel(_ model: LLMModelChoice, scope: ChatSettingsScope = .currentChat) {
+        switch scope {
+        case .currentChat:
+            updateChatSettings(
+                systemPrompt: currentSystemPrompt,
+                temperature: currentTemperature,
+                model: model,
+                reasoningLevel: currentReasoningLevel,
+                toolsEnabled: currentToolsEnabled,
+                appendDateToSystemPrompt: currentAppendDateToSystemPrompt,
+                thinkingEnabled: currentThinkingEnabled,
+                thinkingBudgetTokens: currentThinkingBudgetTokens
+            )
+        case .defaults:
+            UserDefaults.standard.set(model.rawValue, forKey: "model")
+        }
     }
 
     func resetChats(usingDeletedModel modelID: String) {
@@ -484,7 +551,7 @@ class ChatManager: ObservableObject {
         let aiMessage = ChatMessage(
             content: "",
             isUser: false,
-            reasoningDuration: AFMModelCatalog.supportsReasoning(chat.model) ? 0 : nil,
+            reasoningDuration: AFMModelCatalog.usesAppleReasoningLevels(chat.model) ? 0 : nil,
             model: chat.model
         )
         chat.messages.append(aiMessage)
@@ -659,7 +726,7 @@ class ChatManager: ObservableObject {
         let aiMessage = ChatMessage(
             content: "",
             isUser: false,
-            reasoningDuration: AFMModelCatalog.supportsReasoning(chat.model) ? 0 : nil,
+            reasoningDuration: AFMModelCatalog.usesAppleReasoningLevels(chat.model) ? 0 : nil,
             model: chat.model
         )
         chat.messages.append(aiMessage)
@@ -717,7 +784,6 @@ class ChatManager: ObservableObject {
         sessions[chatId] = newSession
         refreshContextWindowMetadata()
         refreshContextUsage()
-        prepareCurrentModelInBackground()
     }
     
     // Force recreation of the current session (useful when settings change)
@@ -909,27 +975,44 @@ class ChatManager: ObservableObject {
         var latestReasoningDuration: TimeInterval?
         var latestReasoningTokenCount: Int?
         var reasoningStartDate: Date?
-        let tracksReasoningDuration = AFMModelCatalog.supportsReasoning(chat.model)
+        let usesAppleReasoning = AFMModelCatalog.usesAppleReasoningLevels(chat.model)
+        let tracksThinkingClock = usesAppleReasoning || chat.thinkingEnabled
 
-        if tracksReasoningDuration {
-            reasoningStartDate = Date()
-            latestReasoningDuration = 0
+        func hasUsableReasoningText(_ text: String?) -> Bool {
+            guard let text else { return false }
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        func startReasoningClockIfNeeded() {
+            guard reasoningStartDate == nil else { return }
+            reasoningStartDate = Date().addingTimeInterval(-(latestReasoningDuration ?? 0))
         }
 
         func currentReasoningDuration() -> TimeInterval? {
-            guard tracksReasoningDuration else { return nil }
             if let reasoningStartDate {
                 return Date().timeIntervalSince(reasoningStartDate)
             }
             return latestReasoningDuration
         }
 
+        func displayedReasoningDuration() -> TimeInterval? {
+            if usesAppleReasoning {
+                return currentReasoningDuration()
+            }
+            guard hasUsableReasoningText(latestReasoning) else { return nil }
+            return currentReasoningDuration()
+        }
+
         func finalizeReasoningDurationIfNeeded(for content: String) {
-            guard tracksReasoningDuration,
-                  let start = reasoningStartDate,
+            guard let start = reasoningStartDate,
                   !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             latestReasoningDuration = Date().timeIntervalSince(start)
             reasoningStartDate = nil
+        }
+
+        if usesAppleReasoning {
+            startReasoningClockIfNeeded()
+            latestReasoningDuration = 0
         }
 
         do {
@@ -938,6 +1021,10 @@ class ChatManager: ObservableObject {
             for try await event in responseStream {
                 await MainActor.run {
                     switch event {
+                    case .generationStarted:
+                        if tracksThinkingClock {
+                            startReasoningClockIfNeeded()
+                        }
                     case .contentUpdated(let fullText):
                         latestText = fullText
                         finalizeReasoningDurationIfNeeded(for: fullText)
@@ -945,7 +1032,7 @@ class ChatManager: ObservableObject {
                             content: latestText,
                             toolCalls: hasSeenToolCalls ? lastToolCalls : [],
                             reasoningContent: latestReasoning,
-                            reasoningDuration: currentReasoningDuration(),
+                            reasoningDuration: displayedReasoningDuration(),
                             reasoningTokenCount: latestReasoningTokenCount
                         )
                     case .toolCallsUpdated(let calls):
@@ -989,21 +1076,26 @@ class ChatManager: ObservableObject {
                             content: latestText,
                             toolCalls: lastToolCalls,
                             reasoningContent: latestReasoning,
-                            reasoningDuration: currentReasoningDuration(),
+                            reasoningDuration: displayedReasoningDuration(),
                             reasoningTokenCount: latestReasoningTokenCount
                         )
                     case .reasoningUpdated(let content, let tokenCount):
-                        if let content {
+                        if hasUsableReasoningText(content) {
                             latestReasoning = content
+                            startReasoningClockIfNeeded()
                         }
                         if let tokenCount {
+                            let grew = tokenCount > (latestReasoningTokenCount ?? 0)
                             latestReasoningTokenCount = tokenCount
+                            if grew {
+                                startReasoningClockIfNeeded()
+                            }
                         }
                         self.updateInFlightAssistantMessage(
                             content: latestText,
                             toolCalls: hasSeenToolCalls ? lastToolCalls : [],
                             reasoningContent: latestReasoning,
-                            reasoningDuration: currentReasoningDuration(),
+                            reasoningDuration: displayedReasoningDuration(),
                             reasoningTokenCount: latestReasoningTokenCount
                         )
                     }
@@ -1018,25 +1110,14 @@ class ChatManager: ObservableObject {
                 if let start = reasoningStartDate {
                     latestReasoningDuration = Date().timeIntervalSince(start)
                     reasoningStartDate = nil
-                    self.updateInFlightAssistantMessage(
-                        content: latestText,
-                        toolCalls: hasSeenToolCalls ? lastToolCalls : [],
-                        reasoningContent: latestReasoning,
-                        reasoningDuration: latestReasoningDuration,
-                        reasoningTokenCount: latestReasoningTokenCount
-                    )
-                } else if latestReasoningTokenCount != nil {
-                    self.updateInFlightAssistantMessage(
-                        content: latestText,
-                        toolCalls: hasSeenToolCalls ? lastToolCalls : [],
-                        reasoningContent: latestReasoning,
-                        reasoningDuration: latestReasoningDuration,
-                        reasoningTokenCount: latestReasoningTokenCount
-                    )
                 }
-            }
-            
-            await MainActor.run {
+                self.updateInFlightAssistantMessage(
+                    content: latestText,
+                    toolCalls: hasSeenToolCalls ? lastToolCalls : [],
+                    reasoningContent: latestReasoning,
+                    reasoningDuration: displayedReasoningDuration(),
+                    reasoningTokenCount: latestReasoningTokenCount
+                )
                 self.isLoading = false
                 self.generationPhase = .idle
                 self.refreshContextUsage()
@@ -1081,20 +1162,6 @@ class ChatManager: ObservableObject {
         }
         #endif
         return .generating
-    }
-
-    private func prepareCurrentModelInBackground() {
-        #if AFM_MLX
-        guard #available(iOS 27, *) else { return }
-        let keepID = currentModel.mlxModelID
-        let pipelineTag = keepID.flatMap { DownloadedModelStore.pipelineTag(for: $0) }
-        releaseSessions(keepingMLX: keepID)
-        MLXRuntime.shared.prepareInBackground(
-            id: keepID,
-            pipelineTag: pipelineTag,
-            displayName: currentModel.displayName
-        )
-        #endif
     }
 
     private func releaseSessions(keepingMLX keepID: String?) {
@@ -1168,6 +1235,8 @@ class ChatManager: ObservableObject {
         await processLLMResponse(prompt: preparedPrompt, chat: chat)
     }
 
+    /// Loads GPU weights only for an in-flight send. Browsing other chats or
+    /// switching models leaves the last resident model in memory until then.
     private func prepareModelIfNeeded(_ model: LLMModelChoice) async throws {
         #if AFM_MLX
         guard #available(iOS 27, *) else { return }

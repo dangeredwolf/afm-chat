@@ -55,12 +55,12 @@ enum MLXModelFactory {
         if useVLM {
             capabilities.append(.vision)
         }
-        if HuggingFaceModelCatalog.looksLikeReasoning(id: id, tags: tags) {
-            capabilities.append(.reasoning)
-        }
+        capabilities.append(.reasoning)
 
         let configuration = resolvedConfiguration(id: id, preferVision: useVLM)
         let loadWithVLM = useVLM
+
+        configureDeviceMemoryLimits()
 
         return MLXLanguageModel(
             configuration: configuration,
@@ -102,6 +102,26 @@ enum MLXModelFactory {
     private static func clearGPUBufferCache() {
         #if canImport(MLX)
         MLX.Memory.clearCache()
+        #endif
+    }
+
+    /// iOS jetsam is far below Metal's recommended working set. Keep MLX's
+    /// recycled-buffer cache small so load/inference stay under the watermark.
+    private static let memoryConfigLock = NSLock()
+    nonisolated(unsafe) private static var didConfigureDeviceMemoryLimits = false
+
+    private static func configureDeviceMemoryLimits() {
+        memoryConfigLock.lock()
+        defer { memoryConfigLock.unlock() }
+        guard !didConfigureDeviceMemoryLimits else { return }
+        didConfigureDeviceMemoryLimits = true
+
+        #if canImport(MLX) && os(iOS) && !targetEnvironment(macCatalyst)
+        MLX.Memory.cacheLimit = 20 * 1024 * 1024
+        let available = os_proc_available_memory()
+        if available > 0 {
+            MLX.Memory.memoryLimit = Int(Double(available) * 0.9)
+        }
         #endif
     }
 
@@ -316,7 +336,6 @@ enum MLXModelFactory {
     ) async {
         var lastBytes: Int64 = -1
         var lastLog = Date.distantPast
-        var previousDiskSizes: [String: Int64] = [:]
         while !Task.isCancelled {
             do {
                 try await Task.sleep(for: .milliseconds(250))
@@ -331,17 +350,26 @@ enum MLXModelFactory {
                 let value = task.progress.completedUnitCount
                 return looksLikeLFSPointer(value) ? partial : partial + value
             }
-            let diskSizes = currentDiskDownloadSizes(repoID: repoID)
-            let fromDisk = growingDiskBytes(current: diskSizes, previous: &previousDiskSizes)
-            let received = max(fromCount, fromTaskProgress, fromDisk)
-            await progress.setFallbackInflight(received)
+            let fromDisk = currentDiskDownloadBytes(repoID: repoID)
+            let names = tasks.compactMap { task -> String? in
+                guard let name = task.originalRequest?.url?.lastPathComponent, !name.isEmpty else {
+                    return nil
+                }
+                return name
+            }
+            await progress.setObserved(
+                sessionBytes: fromCount,
+                diskBytes: fromDisk,
+                fileNames: names
+            )
+            let received = max(fromCount, fromDisk)
             let now = Date()
             if received != lastBytes || now.timeIntervalSince(lastLog) >= 2 {
                 lastBytes = received
                 lastLog = now
-                let names = tasks.compactMap { $0.originalRequest?.url?.lastPathComponent }
+                let ui = await progress.publishedBytes()
                 ModelDownloadLog.info(
-                    "live received=\(received) taskBytes=\(fromCount) taskProgress=\(fromTaskProgress) disk=\(fromDisk) running=\(tasks.count) files=\(names.joined(separator: ","))"
+                    "live received=\(received) taskBytes=\(fromCount) taskProgress=\(fromTaskProgress) disk=\(fromDisk) ui=\(ui.completed)/\(ui.total) running=\(tasks.count) files=\(names.joined(separator: ","))"
                 )
             }
         }
@@ -354,6 +382,10 @@ enum MLXModelFactory {
         configuration.waitsForConnectivity = false
         configuration.httpMaximumConnectionsPerHost = 4
         return URLSession(configuration: configuration)
+    }
+
+    nonisolated private static func currentDiskDownloadBytes(repoID: String) -> Int64 {
+        currentDiskDownloadSizes(repoID: repoID).values.reduce(0, +)
     }
 
     nonisolated private static func currentDiskDownloadSizes(repoID: String) -> [String: Int64] {
@@ -370,40 +402,33 @@ enum MLXModelFactory {
             guard FileManager.default.fileExists(atPath: directory.path),
                   let files = try? FileManager.default.contentsOfDirectory(
                     at: directory,
-                    includingPropertiesForKeys: [.fileSizeKey],
+                    includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
                     options: []
                   ) else {
                 continue
             }
             for url in files {
                 let name = url.lastPathComponent
-                let isBlobDir = directory.lastPathComponent == "blobs"
+                let isIncomplete = name.hasSuffix(".incomplete") || name.contains("incomplete")
                 let looksLikeDownload =
                     name.hasPrefix("CFNetworkDownload")
-                    || name.hasSuffix(".tmp")
                     || name.hasSuffix(".download")
-                    || name.contains("incomplete")
-                    || (isBlobDir && name.contains("incomplete"))
+                    || isIncomplete
+                    || (name.hasSuffix(".tmp") && name.contains("CFNetwork"))
                 guard looksLikeDownload else { continue }
-                let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+                let size = Int64(values?.fileSize ?? 0)
                 guard size > 0 else { continue }
+                if isIncomplete {
+                    let modified = values?.contentModificationDate ?? .distantPast
+                    if modified < Date().addingTimeInterval(-6 * 60 * 60) {
+                        continue
+                    }
+                }
                 sizes[url.standardizedFileURL.path] = size
             }
         }
         return sizes
-    }
-
-    nonisolated private static func growingDiskBytes(
-        current: [String: Int64],
-        previous: inout [String: Int64]
-    ) -> Int64 {
-        let growing = current.reduce(Int64(0)) { sum, entry in
-            let prior = previous[entry.key]
-            guard let prior, entry.value > prior else { return sum }
-            return sum + entry.value
-        }
-        previous = current
-        return growing
     }
 
     nonisolated private static func looksLikeLFSPointer(_ bytes: Int64) -> Bool {
@@ -513,9 +538,16 @@ private actor DownloadByteProgress {
     private var finished: Int64
     private var inflightByFile: [String: Int64] = [:]
     private var expectedByFile: [String: Int64] = [:]
-    private var fallbackInflight: Int64 = 0
+    private var sessionBytes: Int64 = 0
+    private var diskBytes: Int64 = 0
     private var queuedBytes: Int64
     private var activeFiles: [String] = []
+    private var observedFileNames: [String] = []
+    private var latestCompleted: Int64 = 0
+    private var latestTotal: Int64 = 0
+    private var latestFileName: String?
+    private var reportTask: Task<Void, Never>?
+    private var lastSpuriousLog = Date.distantPast
     private let estimatedTotal: Int64
     private let onProgress: @Sendable (Int64, Int64, String?) -> Void
 
@@ -529,53 +561,115 @@ private actor DownloadByteProgress {
         self.estimatedTotal = max(total, 1)
         self.queuedBytes = max(0, queuedBytes)
         self.onProgress = onProgress
+        self.latestCompleted = finished
+        self.latestTotal = max(total, 1)
     }
 
     func beginFile(_ path: String, expected: Int64) {
         if !activeFiles.contains(path) {
             activeFiles.append(path)
+            queuedBytes = max(0, queuedBytes - max(expected, 0))
         }
-        expectedByFile[path] = max(expected, 1)
-        queuedBytes = max(0, queuedBytes - max(expected, 0))
-        inflightByFile[path] = inflightByFile[path] ?? 0
-        report()
+        expectedByFile[path] = max(expectedByFile[path] ?? 0, expected, 1)
+        inflightByFile[path] = 0
+        scheduleReport()
     }
 
     func setInflight(_ path: String, bytes: Int64, expected: Int64) {
         expectedByFile[path] = max(expectedByFile[path] ?? 0, expected)
         guard !looksLikeLFSPointer(bytes) else { return }
         inflightByFile[path] = max(0, bytes)
-        report()
+        scheduleReport()
     }
 
-    func setFallbackInflight(_ bytes: Int64) {
-        fallbackInflight = max(0, bytes)
-        report()
+    func setObserved(sessionBytes: Int64, diskBytes: Int64, fileNames: [String]) {
+        self.sessionBytes = max(0, sessionBytes)
+        self.diskBytes = max(0, diskBytes)
+        if !fileNames.isEmpty {
+            observedFileNames = fileNames
+        }
+        scheduleReport()
+    }
+
+    func publishedBytes() -> (completed: Int64, total: Int64) {
+        (latestCompleted, latestTotal)
     }
 
     func finish(_ path: String, size: Int64) {
-        let actual = max(size, inflightByFile[path] ?? 0, expectedByFile[path] ?? 0)
+        let actual = max(size, expectedByFile[path] ?? 0)
         activeFiles.removeAll { $0 == path }
         inflightByFile[path] = nil
         expectedByFile[path] = nil
         finished += actual
-        report()
+        diskBytes = max(0, diskBytes - actual)
+        sessionBytes = 0
+        scheduleReport()
     }
 
-    private func report() {
+    private func scheduleReport() {
+        let snapshot = snapshotProgress()
+        latestCompleted = snapshot.completed
+        latestTotal = snapshot.total
+        latestFileName = snapshot.fileName
+        guard reportTask == nil else { return }
+        reportTask = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            reportTask = nil
+            onProgress(latestCompleted, latestTotal, latestFileName)
+        }
+    }
+
+    private func snapshotProgress() -> (completed: Int64, total: Int64, fileName: String?) {
         let tracked = inflightByFile.values.reduce(Int64(0)) { partial, value in
             looksLikeLFSPointer(value) ? partial : partial + value
         }
-        let live = max(tracked, fallbackInflight)
-        let current = max(finished + live, 0)
+        let physical = max(diskBytes, sessionBytes)
+        let trackedLive: Int64
+        if isSpurious(tracked: tracked, physical: physical) {
+            trackedLive = 0
+            let now = Date()
+            if now.timeIntervalSince(lastSpuriousLog) >= 5 {
+                lastSpuriousLog = now
+                ModelDownloadLog.info(
+                    "ignoring stuck file progress tracked=\(tracked) session=\(sessionBytes) disk=\(diskBytes)"
+                )
+            }
+        } else {
+            trackedLive = tracked
+        }
+        let live = activeFiles.isEmpty ? 0 : max(trackedLive, physical)
+        let current = max(finished + live, finished, 0)
         let expectedActive = expectedByFile.values.reduce(Int64(0), +)
         let remaining = max(0, expectedActive - live) + queuedBytes
         var displayedTotal = max(estimatedTotal, current + remaining)
         if !activeFiles.isEmpty {
             displayedTotal = max(displayedTotal, current + 1)
         }
-        let fileName = activeFiles.last.map { URL(fileURLWithPath: $0).lastPathComponent }
-        onProgress(current, displayedTotal, fileName)
+        let fileName = displayedFileName()
+        return (current, displayedTotal, fileName)
+    }
+
+    private func isSpurious(tracked: Int64, physical: Int64) -> Bool {
+        guard tracked > 1_000_000 else { return false }
+        if physical > 65_536 {
+            let tolerance = max(32_000_000, tracked / 10)
+            return tracked > physical + tolerance
+        }
+        let expected = expectedByFile.values.reduce(Int64(0), +)
+        return expected > 1_000_000 && tracked >= expected * 9 / 10
+    }
+
+    private func displayedFileName() -> String? {
+        let fromSession = observedFileNames.last { name in
+            name.contains(".") && !name.hasPrefix("CFNetwork")
+        }
+        if let fromSession {
+            return fromSession
+        }
+        if let active = activeFiles.last {
+            return URL(fileURLWithPath: active).lastPathComponent
+        }
+        return observedFileNames.last
     }
 }
 
