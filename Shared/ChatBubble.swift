@@ -15,12 +15,21 @@ private struct DisclosureHeader: View, Equatable {
     let isExpanded: Bool
     var showsChevron: Bool = true
     var isFailed: Bool = false
+    var isInProgress: Bool = false
 
     var body: some View {
         HStack(spacing: 4) {
             Text(title)
                 .font(.subheadline)
                 .foregroundStyle(isFailed ? Color.red.opacity(0.85) : Color.secondary)
+
+            if isInProgress {
+                ProgressView()
+                    .tint(isFailed ? Color.red.opacity(0.85) : Color.secondary)
+                    .scaleEffect(0.55)
+                    .frame(width: 12, height: 12)
+                    .accessibilityHidden(true)
+            }
 
             if let qualifier, !qualifier.isEmpty {
                 Text(qualifier)
@@ -98,7 +107,8 @@ struct ReasoningView: View {
                     title: headerTitle,
                     qualifier: headerQualifier,
                     isExpanded: isExpanded,
-                    showsChevron: hasExpandableContent
+                    showsChevron: hasExpandableContent,
+                    isInProgress: isThinkingActive
                 )
             }
             .buttonStyle(.plain)
@@ -163,16 +173,16 @@ private func toolCallTitle(name: String, status: ToolCallStatus) -> String {
     let failed = status == .failed
 
     switch key {
-    case "web search", "websearch":
+    case "web search", "websearch", "web_search":
         if failed { return "Search failed" }
         return inProgress ? "Searching the web" : "Searched the web"
-    case "web fetch", "webfetch":
+    case "web fetch", "webfetch", "web_fetch":
         if failed { return "Couldn't read page" }
         return inProgress ? "Reading page" : "Read page"
-    case "code interpreter", "codeinterpreter", "javascript":
+    case "code interpreter", "codeinterpreter", "javascript", "code_interpreter":
         if failed { return "Code failed" }
         return inProgress ? "Running code" : "Ran code"
-    case "read attachment", "readattachment":
+    case "read attachment", "readattachment", "read_attachment":
         if failed { return "Couldn't read file" }
         return inProgress ? "Reading file" : "Read file"
     default:
@@ -190,7 +200,8 @@ private struct ToolCallHeaderView: View, Equatable {
         DisclosureHeader(
             title: toolCallTitle(name: toolName, status: status),
             isExpanded: isExpanded,
-            isFailed: status == .failed
+            isFailed: status == .failed,
+            isInProgress: status == .pending || status == .executing
         )
     }
 }

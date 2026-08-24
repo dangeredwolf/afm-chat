@@ -1279,13 +1279,13 @@ class ChatManager: ObservableObject {
     // Get tool description for a given tool name
     private func getToolDescription(for toolName: String) -> String {
         switch toolName {
-        case "Code Interpreter":
+        case "Code Interpreter", "code_interpreter":
             return "Execute JavaScript code and returns the result"
-        case "Web Search":
+        case "Web Search", "web_search":
             return "Search the web for information on any topic"
-        case "Read Attachment":
+        case "Read Attachment", "read_attachment":
             return "Read or transcribe content from a user-attached file"
-        case "Web Fetch":
+        case "Web Fetch", "web_fetch":
             return "Fetch and extract readable content from a web page"
         default:
             return "Execute tool: \(toolName)"

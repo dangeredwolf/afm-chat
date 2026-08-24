@@ -54,7 +54,8 @@ final class AFMClient: LLMClient {
         return AFMSession(
             session: session,
             configuration: configuration,
-            instructions: instructions
+            instructions: instructions,
+            tools: afmTools
         )
     }
 }
@@ -92,6 +93,9 @@ private final class AFMSession: LLMSession {
     private let session: LanguageModelSession
     private let configuration: LLMSessionConfiguration
     private let instructions: String
+    #if AFM_MLX
+    private let tools: [any Tool]
+    #endif
     private let pipeline: AFMSessionPipeline
     private var lastMaxContentLength: Int = 0
     private var lastReasoningSignature: Int = 0
@@ -100,10 +104,20 @@ private final class AFMSession: LLMSession {
     private var didLogReasoningSignatureDump = false
     private var streamChunkIndex: Int = 0
 
-    init(session: LanguageModelSession, configuration: LLMSessionConfiguration, instructions: String) {
+    init(
+        session: LanguageModelSession,
+        configuration: LLMSessionConfiguration,
+        instructions: String,
+        tools: [any Tool]
+    ) {
         self.session = session
         self.configuration = configuration
         self.instructions = instructions
+        #if AFM_MLX
+        self.tools = tools
+        #else
+        _ = tools
+        #endif
         self.pipeline = AFMSessionPipeline.current
     }
 
@@ -134,7 +148,8 @@ private final class AFMSession: LLMSession {
                 prompt: prompt,
                 temperature: temperature,
                 thinkingEnabled: configuration.thinkingEnabled,
-                thinkingBudgetTokens: configuration.thinkingBudgetTokens
+                thinkingBudgetTokens: configuration.thinkingBudgetTokens,
+                tools: tools
             )
         }
         #endif

@@ -1,6 +1,7 @@
 import Foundation
 
 #if AFM_MLX
+import FoundationModels
 import MLXFoundationModels
 import MLXLMCommon
 
@@ -13,7 +14,8 @@ nonisolated enum MLXTokenStream {
         prompt: LLMPrompt,
         temperature: Double,
         thinkingEnabled: Bool,
-        thinkingBudgetTokens: Int?
+        thinkingBudgetTokens: Int?,
+        tools: [any FoundationModels.Tool]
     ) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task.detached {
@@ -26,6 +28,7 @@ nonisolated enum MLXTokenStream {
                         temperature: temperature,
                         thinkingEnabled: thinkingEnabled,
                         thinkingBudgetTokens: thinkingBudgetTokens,
+                        tools: tools,
                         continuation: continuation
                     )
                     continuation.finish()
@@ -47,6 +50,7 @@ nonisolated enum MLXTokenStream {
         temperature: Double,
         thinkingEnabled: Bool,
         thinkingBudgetTokens: Int?,
+        tools: [any FoundationModels.Tool],
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
     ) async throws {
         let model = await MLXModelFactory.makeLanguageModel(
@@ -71,6 +75,15 @@ nonisolated enum MLXTokenStream {
             config: reasoningConfig,
             tokenizer: tokenizer
         )
+        let primedInside = isPrimedInside(
+            thinkingEnabled: thinkingOn,
+            config: reasoningConfig,
+            knownProtocol: resolvedReasoning.knownProtocol
+        )
+        let toolSpecs = MLXToolBridge.specs(for: tools)
+        let state = StreamState(
+            emitter: ReasoningEventEmitter(config: reasoningConfig, primedInside: primedInside)
+        )
 
         let chatSession = ChatSession(
             container,
@@ -78,7 +91,18 @@ nonisolated enum MLXTokenStream {
             history: mlxHistory(from: history, modelID: modelID),
             generateParameters: GenerateParameters(temperature: Float(temperature)),
             components: components,
-            additionalContext: additionalContext
+            additionalContext: additionalContext,
+            tools: toolSpecs.isEmpty ? nil : toolSpecs,
+            toolDispatch: toolSpecs.isEmpty
+                ? nil
+                : { @Sendable call in
+                    try await dispatchTool(
+                        call,
+                        tools: tools,
+                        state: state,
+                        continuation: continuation
+                    )
+                }
         )
 
         let images = prompt.attachments.filter { $0.mediaKind == .image }.map { UserInput.Image.url($0.fileURL) }
@@ -96,94 +120,120 @@ nonisolated enum MLXTokenStream {
             )
         }
 
-        var emitter = ReasoningEventEmitter(
-            config: reasoningConfig,
-            primedInside: isPrimedInside(
-                thinkingEnabled: thinkingOn,
-                config: reasoningConfig,
-                knownProtocol: resolvedReasoning.knownProtocol
-            )
-        )
-
         continuation.yield(.generationStarted)
 
-        var fullText = ""
-        var reasoningText = ""
-        var reasoningTokenCount = 0
         for try await generation in stream {
             try Task.checkCancellation()
             switch generation {
             case .chunk(let chunk):
-                let segments = emitter.process(chunk)
+                if state.takeNeedsEmitterReset() {
+                    state.emitter = ReasoningEventEmitter(
+                        config: reasoningConfig,
+                        primedInside: primedInside
+                    )
+                }
+                let segments = state.emitter.process(chunk)
                 for segment in segments {
                     switch segment {
                     case .reasoning(let text):
-                        reasoningText += text
-                        reasoningTokenCount = tokenizer.encode(
-                            text: reasoningText,
+                        state.reasoningText += text
+                        state.reasoningTokenCount = tokenizer.encode(
+                            text: state.reasoningText,
                             addSpecialTokens: false
                         ).count
                         continuation.yield(
                             .reasoningUpdated(
-                                content: reasoningText,
-                                tokenCount: reasoningTokenCount
+                                content: state.reasoningText,
+                                tokenCount: state.reasoningTokenCount
                             )
                         )
                     case .response(let text):
-                        fullText += text
-                        continuation.yield(.contentUpdated(fullText: fullText))
+                        state.fullText += text
+                        continuation.yield(.contentUpdated(fullText: state.fullText))
                     }
                 }
             case .info(let info):
-                if !reasoningText.isEmpty {
-                    reasoningTokenCount = min(reasoningTokenCount, info.generationTokenCount)
+                if !state.reasoningText.isEmpty {
+                    state.reasoningTokenCount = min(state.reasoningTokenCount, info.generationTokenCount)
                     continuation.yield(
                         .reasoningUpdated(
-                            content: reasoningText,
-                            tokenCount: reasoningTokenCount
+                            content: state.reasoningText,
+                            tokenCount: state.reasoningTokenCount
                         )
                     )
                 }
             case .toolCall(let call):
-                continuation.yield(
-                    .toolCallsUpdated(
-                        calls: [
-                            LLMToolCallEvent(
-                                transcriptID: call.id ?? UUID().uuidString,
-                                toolName: call.function.name,
-                                toolDescription: "",
-                                arguments: encodeToolArguments(call.function.arguments),
-                                status: .pending
-                            )
-                        ]
+                state.upsertToolCall(
+                    LLMToolCallEvent(
+                        transcriptID: call.id ?? UUID().uuidString,
+                        toolName: MLXToolBridge.displayName(for: call.function.name),
+                        toolDescription: MLXToolBridge.displayName(for: call.function.name),
+                        arguments: MLXToolBridge.encodeArguments(call.function.arguments),
+                        status: .pending
                     )
                 )
+                continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
             case .rejectedToolCall:
                 break
             }
         }
 
-        let trailing = emitter.finalize()
+        let trailing = state.emitter.finalize()
         for segment in trailing {
             switch segment {
             case .reasoning(let text):
-                reasoningText += text
+                state.reasoningText += text
             case .response(let text):
-                fullText += text
+                state.fullText += text
             }
         }
 
-        if !reasoningText.isEmpty {
-            reasoningTokenCount = tokenizer.encode(
-                text: reasoningText,
+        if !state.reasoningText.isEmpty {
+            state.reasoningTokenCount = tokenizer.encode(
+                text: state.reasoningText,
                 addSpecialTokens: false
             ).count
             continuation.yield(
-                .reasoningUpdated(content: reasoningText, tokenCount: reasoningTokenCount)
+                .reasoningUpdated(content: state.reasoningText, tokenCount: state.reasoningTokenCount)
             )
         }
-        if !fullText.isEmpty {
-            continuation.yield(.contentUpdated(fullText: fullText))
+        if !state.fullText.isEmpty {
+            continuation.yield(.contentUpdated(fullText: state.fullText))
+        }
+    }
+
+    private static func dispatchTool(
+        _ call: ToolCall,
+        tools: [any FoundationModels.Tool],
+        state: StreamState,
+        continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
+    ) async throws -> String {
+        let transcriptID = call.id ?? UUID().uuidString
+        let displayName = MLXToolBridge.displayName(for: call.function.name)
+        let arguments = MLXToolBridge.encodeArguments(call.function.arguments)
+        state.upsertToolCall(
+            LLMToolCallEvent(
+                transcriptID: transcriptID,
+                toolName: displayName,
+                toolDescription: displayName,
+                arguments: arguments,
+                status: .executing
+            )
+        )
+        continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
+        state.needsEmitterReset = true
+
+        do {
+            let result = try await MLXToolBridge.invoke(call, tools: tools)
+            state.completeToolCall(transcriptID: transcriptID, result: result)
+            continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
+            return result
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            state.failToolCall(transcriptID: transcriptID, error: error.localizedDescription)
+            continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
+            throw error
         }
     }
 
@@ -284,19 +334,49 @@ nonisolated enum MLXTokenStream {
         from history: [LLMHistoryEntry],
         modelID: String
     ) -> [MLXLMCommon.Chat.Message] {
-        history.compactMap { entry in
+        history.flatMap { entry -> [MLXLMCommon.Chat.Message] in
             let images = entry.attachments.filter { $0.mediaKind == .image }.map { UserInput.Image.url($0.fileURL) }
             let videos = entry.attachments.filter { $0.mediaKind == .video }.map { UserInput.Video.url($0.fileURL) }
             let audios = entry.attachments.filter { $0.mediaKind == .audio }.map { UserInput.Audio.url($0.fileURL) }
             if entry.isUser {
-                return .user(entry.content, images: images, videos: videos, audios: audios)
+                return [.user(entry.content, images: images, videos: videos, audios: audios)]
             }
-            let content = assistantHistoryContent(from: entry, modelID: modelID)
-            guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return nil
-            }
-            return .assistant(content)
+            return assistantHistoryMessages(from: entry, modelID: modelID)
         }
+    }
+
+    private static func assistantHistoryMessages(
+        from entry: LLMHistoryEntry,
+        modelID: String
+    ) -> [MLXLMCommon.Chat.Message] {
+        var messages: [MLXLMCommon.Chat.Message] = []
+        if !entry.toolCalls.isEmpty {
+            let mlxCalls = entry.toolCalls.map { historyCall in
+                ToolCall(
+                    function: ToolCall.Function(
+                        name: MLXToolBridge.schemaName(for: historyCall.toolName),
+                        arguments: MLXToolBridge.decodeArguments(historyCall.argumentsJSON)
+                    ),
+                    id: historyCall.transcriptID
+                )
+            }
+            messages.append(.assistant("", toolCalls: mlxCalls))
+            for historyCall in entry.toolCalls {
+                messages.append(
+                    .tool(
+                        historyCall.result ?? historyCall.error ?? "",
+                        id: historyCall.transcriptID,
+                        name: MLXToolBridge.schemaName(for: historyCall.toolName)
+                    )
+                )
+            }
+        }
+
+        let content = assistantHistoryContent(from: entry, modelID: modelID)
+        if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            messages.append(.assistant(content))
+        }
+        return messages
     }
 
     private static func assistantHistoryContent(from entry: LLMHistoryEntry, modelID: String) -> String {
@@ -316,16 +396,80 @@ nonisolated enum MLXTokenStream {
         }
         return "<think>\n\(reasoning)\n</think>\n\n\(answer)"
     }
+}
 
-    private static func encodeToolArguments(_ arguments: [String: JSONValue]) -> String {
-        let object = arguments.mapValues(\.anyValue)
-        guard JSONSerialization.isValidJSONObject(object),
-              let data = try? JSONSerialization.data(withJSONObject: object),
-              let json = String(data: data, encoding: .utf8)
-        else {
-            return "{}"
+@available(iOS 27, *)
+nonisolated private final class StreamState: @unchecked Sendable {
+    private let lock = NSLock()
+    var emitter: ReasoningEventEmitter
+    var fullText = ""
+    var reasoningText = ""
+    var reasoningTokenCount = 0
+    private var storedToolCalls: [LLMToolCallEvent] = []
+    private var storedNeedsEmitterReset = false
+
+    init(emitter: ReasoningEventEmitter) {
+        self.emitter = emitter
+    }
+
+    var toolCalls: [LLMToolCallEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedToolCalls
+    }
+
+    var needsEmitterReset: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedNeedsEmitterReset
         }
-        return json
+        set {
+            lock.lock()
+            storedNeedsEmitterReset = newValue
+            lock.unlock()
+        }
+    }
+
+    func takeNeedsEmitterReset() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let value = storedNeedsEmitterReset
+        storedNeedsEmitterReset = false
+        return value
+    }
+
+    func upsertToolCall(_ event: LLMToolCallEvent) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let index = storedToolCalls.firstIndex(where: { $0.transcriptID == event.transcriptID }) {
+            storedToolCalls[index].status = event.status
+            storedToolCalls[index].result = event.result
+            storedToolCalls[index].error = event.error
+        } else {
+            storedToolCalls.append(event)
+        }
+    }
+
+    func completeToolCall(transcriptID: String, result: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let index = storedToolCalls.firstIndex(where: { $0.transcriptID == transcriptID }) else {
+            return
+        }
+        storedToolCalls[index].status = .completed
+        storedToolCalls[index].result = result
+        storedToolCalls[index].error = nil
+    }
+
+    func failToolCall(transcriptID: String, error: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let index = storedToolCalls.firstIndex(where: { $0.transcriptID == transcriptID }) else {
+            return
+        }
+        storedToolCalls[index].status = .failed
+        storedToolCalls[index].error = error
     }
 }
 #endif

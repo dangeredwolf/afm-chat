@@ -70,7 +70,7 @@ public enum LLMModelChoice: Hashable, Codable, Identifiable, Sendable {
         case .onDevice: return "On-Device"
         case .privateCloudCompute: return "Private Cloud Compute"
         case .mlx(let id):
-            return id.split(separator: "/").last.map(String.init) ?? id
+            return ModelDisplayName.shortName(fromHubID: id)
         }
     }
 
@@ -349,14 +349,14 @@ public struct AnyLLMTool: LLMTool {
     }
 }
 
-public enum LLMToolCallStatus: String, Codable {
+public enum LLMToolCallStatus: String, Codable, Sendable {
     case pending
     case executing
     case completed
     case failed
 }
 
-public struct LLMToolCallEvent: Codable, Identifiable {
+public struct LLMToolCallEvent: Codable, Identifiable, Sendable {
     public let id = UUID()
     public let transcriptID: String
     public let toolName: String
@@ -366,7 +366,7 @@ public struct LLMToolCallEvent: Codable, Identifiable {
     public var result: String?
     public var error: String?
 
-    public init(
+    nonisolated public init(
         transcriptID: String = UUID().uuidString,
         toolName: String,
         toolDescription: String,
@@ -385,7 +385,7 @@ public struct LLMToolCallEvent: Codable, Identifiable {
     }
 }
 
-public enum LLMStreamEvent {
+public enum LLMStreamEvent: Sendable {
     case generationStarted
     case contentUpdated(fullText: String)
     case toolCallsUpdated(calls: [LLMToolCallEvent])

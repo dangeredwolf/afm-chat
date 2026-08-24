@@ -492,7 +492,7 @@ enum MLXModelFactory {
 
 #if AFM_MLX
 /// Gemma 4 thinking is a chat-template flag plus channel delimiters, not `<think>` tags.
-enum Gemma4Chat {
+nonisolated enum Gemma4Chat {
     static let reasoningConfig = ReasoningConfig(
         startDelimiter: "<|channel>thought",
         endDelimiter: "<channel|>",
