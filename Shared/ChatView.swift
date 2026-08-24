@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import FoundationModels
 import PhotosUI
 import UniformTypeIdentifiers
 
@@ -114,6 +113,18 @@ struct ChatView: View {
                     guard chatManager.isLoading, let lastMessage = chatManager.currentMessages.last else { return }
                     proxy.scrollTo(lastMessage.id, anchor: .bottom)
                 }
+                .onChange(of: chatManager.currentMessages.last?.toolCalls.count) { _, _ in
+                    guard chatManager.isLoading, let lastMessage = chatManager.currentMessages.last else { return }
+                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                }
+                .onChange(of: chatManager.currentMessages.last?.toolCalls.map(\.status)) { _, _ in
+                    guard chatManager.isLoading, let lastMessage = chatManager.currentMessages.last else { return }
+                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                }
+                .onChange(of: chatManager.currentMessages.last?.transcriptBlocks.count) { _, _ in
+                    guard chatManager.isLoading, let lastMessage = chatManager.currentMessages.last else { return }
+                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                }
                 .onChange(of: chatManager.generationPhase) { _, _ in
                     guard chatManager.isLoading, let lastMessage = chatManager.currentMessages.last else { return }
                     proxy.scrollTo(lastMessage.id, anchor: .bottom)
@@ -148,14 +159,6 @@ struct ChatView: View {
                 .padding(.top, 8)
                 .background(Color.orange.opacity(0.05))
             }
-            
-            #if AFM_MLX
-            if #available(iOS 27, *) {
-                ModelDownloadBanner {
-                    showingModelPicker = true
-                }
-            }
-            #endif
 
             ChatInputBar(
                 text: $chatManager.inputText,
@@ -176,6 +179,9 @@ struct ChatView: View {
                     }
                     chatManager.sendMessage()
                     isInputFocused = false
+                },
+                onStop: {
+                    chatManager.stopGeneration()
                 },
                 onMicTap: {
                     handleMicTap()
@@ -246,9 +252,7 @@ struct ChatView: View {
         }
         #endif
         .sheet(isPresented: $showingModelPicker) {
-            if #available(iOS 27, *) {
-                ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
-            }
+            ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
         }
         .onAppear {
             if #available(iOS 26, *), speechInputManager == nil {

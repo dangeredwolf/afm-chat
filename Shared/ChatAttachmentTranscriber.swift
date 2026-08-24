@@ -234,7 +234,10 @@ enum AttachmentMediaSupport {
     static func capabilities(for model: LLMModelChoice) -> LLMMediaCapabilities {
         switch model {
         case .onDevice, .privateCloudCompute:
-            return .apple
+            if #available(iOS 27, *) {
+                return .apple
+            }
+            return .none
         case .mlx(let id):
             #if AFM_MLX
             return HuggingFaceModelCatalog.mediaCapabilities(
@@ -293,7 +296,8 @@ enum AttachmentMediaSupport {
             content: content,
             attachments: partitioned.native + keptFiles,
             toolCalls: entry.toolCalls,
-            reasoningContent: entry.reasoningContent
+            reasoningContent: entry.reasoningContent,
+            transcriptBlocks: entry.transcriptBlocks
         )
     }
 

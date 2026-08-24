@@ -1,5 +1,4 @@
 import Foundation
-import FoundationModels
 import os
 
 #if AFM_MLX
@@ -7,7 +6,6 @@ import HuggingFace
 #if canImport(MLX)
 import MLX
 #endif
-import MLXFoundationModels
 import MLXHuggingFace
 import MLXLLM
 import MLXLMCommon
@@ -29,12 +27,35 @@ nonisolated enum ModelDownloadLog {
 
 enum MLXModelFactory {
     #if AFM_MLX
-    @available(iOS 27, *)
-    static func makeLanguageModel(
+    static func loadContainer(
         id: String,
         pipelineTag: String? = nil,
         tags: [String] = []
-    ) -> MLXLanguageModel {
+    ) async throws -> ModelContainer {
+        try await ContainerCache.shared.container(id: id) {
+            try await loadUncachedContainer(id: id, pipelineTag: pipelineTag, tags: tags)
+        }
+    }
+
+    static func preload(id: String, pipelineTag: String? = nil, tags: [String] = []) async throws {
+        _ = try await loadContainer(id: id, pipelineTag: pipelineTag, tags: tags)
+    }
+
+    static func evict(id: String, pipelineTag: String? = nil) async {
+        await ContainerCache.shared.evict(id: id)
+        clearGPUBufferCache()
+    }
+
+    static func evictAllResidentWeights() async {
+        await ContainerCache.shared.evictAll()
+        clearGPUBufferCache()
+    }
+
+    private static func loadUncachedContainer(
+        id: String,
+        pipelineTag: String?,
+        tags: [String]
+    ) async throws -> ModelContainer {
         // Linking these modules registers LLM/VLM trampoline factories.
         _ = LLMModelFactory.shared
         _ = VLMModelFactory.shared
@@ -47,56 +68,27 @@ enum MLXModelFactory {
         // Gemma 4's VLM `gemma4PrepareTextOnly` crashes in Metal Gather/setBytes
         // during text prefill. Load the text backbone through LLMModelFactory.
         let useVLM = media.vision && !HuggingFaceModelCatalog.looksLikeGemma4(id: id)
-
-        var capabilities: [LanguageModelCapabilities.Capability] = [
-            .toolCalling,
-            .guidedGeneration
-        ]
-        if useVLM {
-            capabilities.append(.vision)
-        }
-        capabilities.append(.reasoning)
-
         let configuration = resolvedConfiguration(id: id, preferVision: useVLM)
-        let loadWithVLM = useVLM
 
         configureDeviceMemoryLimits()
 
-        return MLXLanguageModel(
+        let progressHandler: @Sendable (Progress) -> Void = { progress in
+            LoadProgressBridge.report(fraction: progress.fractionCompleted)
+        }
+        if useVLM {
+            return try await VLMModelFactory.shared.loadContainer(
+                from: #hubDownloader(),
+                using: #huggingFaceTokenizerLoader(),
+                configuration: configuration,
+                progressHandler: progressHandler
+            )
+        }
+        return try await LLMModelFactory.shared.loadContainer(
+            from: #hubDownloader(),
+            using: #huggingFaceTokenizerLoader(),
             configuration: configuration,
-            capabilities: capabilities,
-            weightsLocation: hubWeightsLocation,
-            load: { configuration, progressHandler in
-                let factory: any ModelFactory =
-                    loadWithVLM ? VLMModelFactory.shared : LLMModelFactory.shared
-                return try await factory.loadContainer(
-                    from: #hubDownloader(),
-                    using: #huggingFaceTokenizerLoader(),
-                    configuration: configuration,
-                    progressHandler: { progress in
-                        progressHandler(progress)
-                        LoadProgressBridge.report(fraction: progress.fractionCompleted)
-                    }
-                )
-            }
+            progressHandler: progressHandler
         )
-    }
-
-    @available(iOS 27, *)
-    static func preload(id: String, pipelineTag: String? = nil, tags: [String] = []) async throws {
-        try await makeLanguageModel(id: id, pipelineTag: pipelineTag, tags: tags).preload()
-    }
-
-    @available(iOS 27, *)
-    static func evict(id: String, pipelineTag: String? = nil) async {
-        await makeLanguageModel(id: id, pipelineTag: pipelineTag).evict()
-        clearGPUBufferCache()
-    }
-
-    @available(iOS 27, *)
-    static func evictAllResidentWeights() async {
-        await MLXLanguageModel.evictAll()
-        clearGPUBufferCache()
     }
 
     private static func clearGPUBufferCache() {
@@ -126,7 +118,6 @@ enum MLXModelFactory {
     }
 
     /// Loads weights and runs a one-token forward pass so Metal shaders JIT before the first user turn.
-    @available(iOS 27, *)
     nonisolated static func warmUp(
         id: String,
         pipelineTag: String? = nil,
@@ -141,11 +132,9 @@ enum MLXModelFactory {
         }
         defer { LoadProgressBridge.setHandler(nil) }
 
-        let model = await makeLanguageModel(id: id, pipelineTag: pipelineTag, tags: tags)
-        try await model.preload()
+        let container = try await loadContainer(id: id, pipelineTag: pipelineTag, tags: tags)
 
         onPhase(.compiling(name: name))
-        let container = try await model.loadContainer()
         try await container.perform { context in
             let input = try await context.processor.prepare(
                 input: UserInput(chat: [MLXLMCommon.Chat.Message.user("warmup")])
@@ -160,7 +149,6 @@ enum MLXModelFactory {
 
     /// Downloads the selected MLX variant into the shared Hub cache without loading weights.
     /// Returns the weights subdirectory (`mlx-4bit`, etc.) when the variant is not at repo root.
-    @available(iOS 27, *)
     nonisolated static func downloadWeights(
         id: String,
         onProgress: @escaping @Sendable (Int64, Int64, String?) -> Void
@@ -225,7 +213,6 @@ enum MLXModelFactory {
         return plan.weightsSubpath
     }
 
-    @available(iOS 27, *)
     nonisolated private static func downloadFiles(
         _ files: [HuggingFaceRepositoryFile],
         repo: Repo.ID,
@@ -252,7 +239,6 @@ enum MLXModelFactory {
         }
     }
 
-    @available(iOS 27, *)
     nonisolated private static func downloadFileWithRetries(
         _ file: HuggingFaceRepositoryFile,
         repo: Repo.ID,
@@ -286,7 +272,6 @@ enum MLXModelFactory {
         throw lastError
     }
 
-    @available(iOS 27, *)
     nonisolated private static func downloadSingleFile(
         _ file: HuggingFaceRepositoryFile,
         repo: Repo.ID,
@@ -477,21 +462,60 @@ enum MLXModelFactory {
         return nil
     }
 
-    private static func hubWeightsLocation(id: String) -> URL {
-        if let directory = HuggingFaceCache.weightsDirectory(for: id) {
-            return directory
+    private actor ContainerCache {
+        static let shared = ContainerCache()
+
+        private var containers: [String: ModelContainer] = [:]
+        private var loading: [String: Task<ModelContainer, Error>] = [:]
+
+        func container(
+            id: String,
+            load: @escaping @Sendable () async throws -> ModelContainer
+        ) async throws -> ModelContainer {
+            if let existing = containers[id] {
+                return existing
+            }
+            if let task = loading[id] {
+                return try await task.value
+            }
+            let task = Task {
+                try await load()
+            }
+            loading[id] = task
+            do {
+                let container = try await task.value
+                loading[id] = nil
+                containers[id] = container
+                return container
+            } catch {
+                loading[id] = nil
+                throw error
+            }
         }
-        let cache = HubCache.default
-        guard let repo = Repo.ID(rawValue: id) else {
-            return cache.cacheDirectory
+
+        func evict(id: String) {
+            loading[id]?.cancel()
+            loading[id] = nil
+            containers[id] = nil
         }
-        return cache.repoDirectory(repo: repo, kind: .model)
+
+        func evictAll() {
+            for task in loading.values {
+                task.cancel()
+            }
+            loading.removeAll()
+            containers.removeAll()
+        }
     }
     #endif
 }
 
 #if AFM_MLX
 /// Gemma 4 thinking is a chat-template flag plus channel delimiters, not `<think>` tags.
+///
+/// The model emits `<|channel>thought` itself on the first turn. After a tool
+/// result it usually continues with the user-facing answer rather than a new
+/// thought span, unlike Qwen which can think again and then close `</think>`.
 nonisolated enum Gemma4Chat {
     static let reasoningConfig = ReasoningConfig(
         startDelimiter: "<|channel>thought",

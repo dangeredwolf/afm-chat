@@ -211,6 +211,7 @@ private final class WebViewExtractionSession: NSObject, WKNavigationDelegate {
     }
 
     func extract(url: URL) async throws -> ExtractedPage {
+        await Task.yield()
         webView.stopLoading()
 
         if !Self.suggestsSPAHeuristic(for: url) {

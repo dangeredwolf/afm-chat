@@ -284,6 +284,23 @@ extension ChatMessageAttachmentKind {
     }
 }
 
+enum ChatTranscriptBlock: Identifiable, Codable, Equatable {
+    case reasoning(id: UUID, content: String, duration: TimeInterval?)
+    case tool(id: UUID)
+    case text(id: UUID, content: String)
+
+    var id: UUID {
+        switch self {
+        case .reasoning(let id, _, _):
+            return id
+        case .tool(let id):
+            return id
+        case .text(let id, _):
+            return id
+        }
+    }
+}
+
 enum ToolCallStatus: String, Codable, CaseIterable {
     case pending = "pending"
     case executing = "executing"
@@ -319,8 +336,12 @@ struct ChatMessage: Identifiable {
     var reasoningContent: String?
     var reasoningDuration: TimeInterval?
     var reasoningTokenCount: Int?
+    var transcriptBlocks: [ChatTranscriptBlock]
     var attachments: [ChatMessageAttachment]
     var model: LLMModelChoice?
+
+    private static let legacyReasoningBlockID = UUID(uuidString: "AAAAAAAA-BBBB-4CCC-8DDD-000000000001")!
+    private static let legacyTextBlockID = UUID(uuidString: "AAAAAAAA-BBBB-4CCC-8DDD-000000000002")!
 
     init(
         content: String,
@@ -330,6 +351,7 @@ struct ChatMessage: Identifiable {
         reasoningContent: String? = nil,
         reasoningDuration: TimeInterval? = nil,
         reasoningTokenCount: Int? = nil,
+        transcriptBlocks: [ChatTranscriptBlock] = [],
         attachments: [ChatMessageAttachment] = [],
         model: LLMModelChoice? = nil
     ) {
@@ -342,6 +364,7 @@ struct ChatMessage: Identifiable {
         self.reasoningContent = reasoningContent
         self.reasoningDuration = reasoningDuration
         self.reasoningTokenCount = reasoningTokenCount
+        self.transcriptBlocks = transcriptBlocks
         self.attachments = attachments
         self.model = model
     }
@@ -357,6 +380,7 @@ struct ChatMessage: Identifiable {
         reasoningContent: String?,
         reasoningDuration: TimeInterval?,
         reasoningTokenCount: Int?,
+        transcriptBlocks: [ChatTranscriptBlock],
         attachments: [ChatMessageAttachment],
         model: LLMModelChoice?
     ) {
@@ -369,6 +393,7 @@ struct ChatMessage: Identifiable {
         self.reasoningContent = reasoningContent
         self.reasoningDuration = reasoningDuration
         self.reasoningTokenCount = reasoningTokenCount
+        self.transcriptBlocks = transcriptBlocks
         self.attachments = attachments
         self.model = model
     }
@@ -397,12 +422,43 @@ struct ChatMessage: Identifiable {
         return !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    var displayBlocks: [ChatTranscriptBlock] {
+        if !transcriptBlocks.isEmpty {
+            return transcriptBlocks
+        }
+        return Self.legacyDisplayBlocks(
+            reasoningContent: reasoningContent,
+            reasoningDuration: reasoningDuration,
+            toolCalls: toolCalls,
+            content: content
+        )
+    }
+
+    func historyTranscriptBlocks() -> [LLMTranscriptBlock] {
+        guard !transcriptBlocks.isEmpty else { return [] }
+        return transcriptBlocks.compactMap { block in
+            switch block {
+            case .reasoning(_, let content, _):
+                let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : .reasoning(content: content)
+            case .tool(let id):
+                guard let tool = toolCalls.first(where: { $0.id == id }),
+                      tool.status == .completed || tool.status == .failed else { return nil }
+                return .tool(transcriptID: tool.transcriptID)
+            case .text(_, let content):
+                let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : .text(content: content)
+            }
+        }
+    }
+
     func updatedForStreaming(
         content: String,
         toolCalls: [ToolCallInfo],
         reasoningContent: String?,
         reasoningDuration: TimeInterval?,
-        reasoningTokenCount: Int?
+        reasoningTokenCount: Int?,
+        transcriptBlocks: [ChatTranscriptBlock]
     ) -> ChatMessage {
         ChatMessage(
             id: id,
@@ -414,16 +470,45 @@ struct ChatMessage: Identifiable {
             reasoningContent: reasoningContent,
             reasoningDuration: reasoningDuration,
             reasoningTokenCount: reasoningTokenCount,
+            transcriptBlocks: transcriptBlocks,
             attachments: attachments,
             model: model
         )
+    }
+
+    private static func legacyDisplayBlocks(
+        reasoningContent: String?,
+        reasoningDuration: TimeInterval?,
+        toolCalls: [ToolCallInfo],
+        content: String
+    ) -> [ChatTranscriptBlock] {
+        var blocks: [ChatTranscriptBlock] = []
+        let hasReasoningText = reasoningContent?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty == false
+        if hasReasoningText || reasoningDuration != nil {
+            blocks.append(
+                .reasoning(
+                    id: legacyReasoningBlockID,
+                    content: reasoningContent ?? "",
+                    duration: reasoningDuration
+                )
+            )
+        }
+        for toolCall in toolCalls {
+            blocks.append(.tool(id: toolCall.id))
+        }
+        if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            blocks.append(.text(id: legacyTextBlockID, content: content))
+        }
+        return blocks
     }
 }
 
 // When adding tool calls, etc it broke loading old chats, so this lets us carefully load properties to make everything work
 extension ChatMessage: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, content, isUser, timestamp, error, toolCalls, reasoningContent, reasoningDuration, reasoningTokenCount, attachments, model
+        case id, content, isUser, timestamp, error, toolCalls, reasoningContent, reasoningDuration, reasoningTokenCount, transcriptBlocks, attachments, model
     }
     
     init(from decoder: Decoder) throws {
@@ -441,6 +526,7 @@ extension ChatMessage: Codable {
         let reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
         let reasoningDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .reasoningDuration)
         let reasoningTokenCount = try container.decodeIfPresent(Int.self, forKey: .reasoningTokenCount)
+        let transcriptBlocks = try container.decodeIfPresent([ChatTranscriptBlock].self, forKey: .transcriptBlocks) ?? []
         let attachments = try container.decodeIfPresent([ChatMessageAttachment].self, forKey: .attachments) ?? []
         let model = try container.decodeIfPresent(LLMModelChoice.self, forKey: .model)
         
@@ -454,6 +540,7 @@ extension ChatMessage: Codable {
             reasoningContent: reasoningContent,
             reasoningDuration: reasoningDuration,
             reasoningTokenCount: reasoningTokenCount,
+            transcriptBlocks: transcriptBlocks,
             attachments: attachments,
             model: model
         )
@@ -470,6 +557,9 @@ extension ChatMessage: Codable {
         try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
         try container.encodeIfPresent(reasoningDuration, forKey: .reasoningDuration)
         try container.encodeIfPresent(reasoningTokenCount, forKey: .reasoningTokenCount)
+        if !transcriptBlocks.isEmpty {
+            try container.encode(transcriptBlocks, forKey: .transcriptBlocks)
+        }
         if !attachments.isEmpty {
             try container.encode(attachments, forKey: .attachments)
         }

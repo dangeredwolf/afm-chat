@@ -34,6 +34,8 @@ class ChatManager: ObservableObject {
     // Store sessions per chat to maintain context
     private var sessions: [UUID: LLMSession] = [:]
     private var cachedContextLimit: Int?
+    private var generationTask: Task<Void, Never>?
+    private var generationEpoch: UInt64 = 0
 
     private static let systemPromptDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -144,7 +146,8 @@ class ChatManager: ObservableObject {
                         error: toolCall.error
                     )
                 },
-                reasoningContent: message.isUser ? nil : message.reasoningContent
+                reasoningContent: message.isUser ? nil : message.reasoningContent,
+                transcriptBlocks: message.isUser ? [] : message.historyTranscriptBlocks()
             )
             return AttachmentMediaSupport.preparedHistoryEntry(
                 entry,
@@ -258,10 +261,7 @@ class ChatManager: ObservableObject {
     }
 
     var showsContextUsageIndicator: Bool {
-        if #available(iOS 27, *) {
-            return (contextUsage?.usedTokens ?? 0) > 0
-        }
-        return false
+        (contextUsage?.usedTokens ?? 0) > 0
     }
     
     init() {
@@ -273,10 +273,7 @@ class ChatManager: ObservableObject {
     }
     
     private func resolvedDefaultModel() -> LLMModelChoice {
-        let stored = LLMModelChoice(
-            rawValue: UserDefaults.standard.string(forKey: "model") ?? LLMModelChoice.onDevice.rawValue
-        ) ?? .onDevice
-        return AFMModelCatalog.isModelAvailable(stored) ? stored : .onDevice
+        AFMModelCatalog.resolvedDefaultModel()
     }
 
     private func defaultSettingsValues() -> ChatSettingsValues {
@@ -307,7 +304,9 @@ class ChatManager: ObservableObject {
     }
     
     func deleteChat(_ chatId: UUID) {
-        // Check if it's a temporary chat
+        if isLoading, currentChatId == chatId {
+            stopGeneration()
+        }
         if let tempChat = temporaryChat, tempChat.id == chatId {
             temporaryChat = nil
             currentChatId = nil
@@ -577,9 +576,94 @@ class ChatManager: ObservableObject {
             text: userMessage,
             attachments: attachmentsToSend.map { $0.toLLMAttachment() }
         )
-        Task {
-            await self.prepareThenRespond(prompt: llmPrompt, chat: chat)
+        startGeneration(
+            assistantMessageId: aiMessage.id,
+            chat: chat,
+            prompt: llmPrompt
+        )
+    }
+
+    func stopGeneration() {
+        guard isLoading else { return }
+        let assistantId = currentChat?.messages.last(where: { !$0.isUser })?.id
+        invalidateGeneration()
+        finishStoppedGeneration(assistantMessageId: assistantId)
+    }
+
+    private func startGeneration(assistantMessageId: UUID, chat: Chat, prompt: LLMPrompt) {
+        generationEpoch += 1
+        let epoch = generationEpoch
+        generationTask = Task { @MainActor in
+            await self.prepareThenRespond(
+                prompt: prompt,
+                chat: chat,
+                assistantMessageId: assistantMessageId,
+                epoch: epoch
+            )
         }
+    }
+
+    private func invalidateGeneration() {
+        generationEpoch += 1
+        generationTask?.cancel()
+        generationTask = nil
+    }
+
+    private func isCurrentGeneration(_ epoch: UInt64) -> Bool {
+        generationEpoch == epoch
+    }
+
+    private func finishStoppedGeneration(assistantMessageId: UUID?) {
+        isLoading = false
+        generationPhase = .idle
+        generationTask = nil
+        if let assistantMessageId {
+            finalizeStoppedAssistantMessage(id: assistantMessageId)
+        }
+        if let chatId = currentChatId {
+            sessions[chatId] = createSessionForChat(chatId: chatId)
+        }
+        refreshContextUsage()
+        saveChats()
+    }
+
+    private func finalizeStoppedAssistantMessage(id: UUID) {
+        guard var chat = currentChat,
+              let index = chat.messages.firstIndex(where: { $0.id == id }) else { return }
+        let message = chat.messages[index]
+        let hasText = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasReasoning = !(message.reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        let hasTools = !message.toolCalls.isEmpty
+
+        if !hasText && !hasReasoning && !hasTools {
+            chat.messages.remove(at: index)
+            currentChat = chat
+            return
+        }
+
+        var toolCalls = message.toolCalls
+        for toolIndex in toolCalls.indices {
+            if toolCalls[toolIndex].status == .pending || toolCalls[toolIndex].status == .executing {
+                toolCalls[toolIndex].status = .failed
+                toolCalls[toolIndex].error = "Stopped"
+            }
+        }
+
+        var blocks = message.transcriptBlocks
+        if case .reasoning(_, let content, _) = blocks.last,
+           content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            blocks.removeLast()
+        }
+
+        chat.messages[index] = message.updatedForStreaming(
+            content: message.content,
+            toolCalls: toolCalls,
+            reasoningContent: message.reasoningContent,
+            reasoningDuration: message.reasoningDuration,
+            reasoningTokenCount: message.reasoningTokenCount,
+            transcriptBlocks: blocks
+        )
+        currentChat = chat
     }
 
     func removePendingAttachment(_ attachmentId: UUID) {
@@ -736,9 +820,11 @@ class ChatManager: ObservableObject {
         }
         
         // Retry the request with tool call tracking
-        Task {
-            await self.prepareThenRespond(prompt: llmPrompt, chat: chat)
-        }
+        startGeneration(
+            assistantMessageId: aiMessage.id,
+            chat: chat,
+            prompt: llmPrompt
+        )
     }
     
     func cancelEditing() {
@@ -786,20 +872,12 @@ class ChatManager: ObservableObject {
     }
 
     func refreshContextWindowMetadata() {
-        guard #available(iOS 27, *) else {
-            contextWindowSizes = [:]
-            cachedContextLimit = nil
-            contextUsage = nil
-            return
-        }
-
         let model = currentModel
         Task {
             await self.loadContextWindowMetadata(for: model)
         }
     }
 
-    @available(iOS 27, *)
     private func loadContextWindowMetadata(for model: LLMModelChoice) async {
         let sizes = await AFMModelCatalog.allContextSizes()
         contextWindowSizes = sizes
@@ -808,7 +886,7 @@ class ChatManager: ObservableObject {
     }
 
     func refreshContextUsage() {
-        guard #available(iOS 27, *), let limit = cachedContextLimit else {
+        guard let limit = cachedContextLimit else {
             contextUsage = nil
             return
         }
@@ -958,180 +1036,85 @@ class ChatManager: ObservableObject {
     }
     
     // Process LLM response with real tool call information from transcript
-    private func processLLMResponse(prompt: LLMPrompt, chat: Chat) async {
-        var lastToolCalls: [ToolCallInfo] = []
-        var hasSeenToolCalls = false
-        var latestReasoning: String?
-        var latestReasoningDuration: TimeInterval?
-        var latestReasoningTokenCount: Int?
-        var reasoningStartDate: Date?
+    private func processLLMResponse(
+        prompt: LLMPrompt,
+        chat: Chat,
+        assistantMessageId: UUID,
+        epoch: UInt64
+    ) async {
+        let assembler = AssistantTranscriptAssembler()
         let usesAppleReasoning = AFMModelCatalog.usesAppleReasoningLevels(chat.model)
         let tracksThinkingClock = usesAppleReasoning || chat.thinkingEnabled
 
-        func hasUsableReasoningText(_ text: String?) -> Bool {
-            guard let text else { return false }
-            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-
-        func startReasoningClockIfNeeded() {
-            guard reasoningStartDate == nil else { return }
-            reasoningStartDate = Date().addingTimeInterval(-(latestReasoningDuration ?? 0))
-        }
-
-        func currentReasoningDuration() -> TimeInterval? {
-            if let reasoningStartDate {
-                return Date().timeIntervalSince(reasoningStartDate)
-            }
-            return latestReasoningDuration
-        }
-
-        func displayedReasoningDuration() -> TimeInterval? {
-            if usesAppleReasoning {
-                return currentReasoningDuration()
-            }
-            guard hasUsableReasoningText(latestReasoning) else { return nil }
-            return currentReasoningDuration()
-        }
-
-        func finalizeReasoningDurationIfNeeded(for content: String) {
-            guard let start = reasoningStartDate,
-                  !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            latestReasoningDuration = Date().timeIntervalSince(start)
-            reasoningStartDate = nil
-        }
-
         if usesAppleReasoning {
-            startReasoningClockIfNeeded()
-            latestReasoningDuration = 0
+            assembler.startPlaceholderThinking()
+            publishAssembledMessage(assembler, id: assistantMessageId)
         }
 
         do {
             let responseStream = currentSession.streamResponse(to: prompt, temperature: chat.temperature)
-            var latestText = ""
             for try await event in responseStream {
+                try Task.checkCancellation()
                 await MainActor.run {
+                    guard self.isCurrentGeneration(epoch) else { return }
                     switch event {
                     case .generationStarted:
-                        if tracksThinkingClock {
-                            startReasoningClockIfNeeded()
+                        if tracksThinkingClock && usesAppleReasoning {
+                            assembler.startPlaceholderThinking()
                         }
+                        assembler.refreshOpenReasoningDuration()
                     case .contentUpdated(let fullText):
-                        latestText = fullText
-                        finalizeReasoningDurationIfNeeded(for: fullText)
-                        self.updateInFlightAssistantMessage(
-                            content: latestText,
-                            toolCalls: hasSeenToolCalls ? lastToolCalls : [],
-                            reasoningContent: latestReasoning,
-                            reasoningDuration: displayedReasoningDuration(),
-                            reasoningTokenCount: latestReasoningTokenCount
-                        )
+                        assembler.applyContent(fullText)
                     case .toolCallsUpdated(let calls):
-                        hasSeenToolCalls = true
-                        lastToolCalls = calls.map { call in
-                            let existing = lastToolCalls.first { existing in
-                                if existing.transcriptID == call.transcriptID {
-                                    return true
-                                }
-                                guard existing.toolName == call.toolName else { return false }
-                                if existing.arguments == call.arguments {
-                                    return true
-                                }
-                                let existingIsActive = existing.status == .executing || existing.status == .pending
-                                return existingIsActive && call.result == nil && call.error == nil
-                            }
-                            if let existing {
-                                return existing.updated(
-                                    from: call,
-                                    toolDescription: self.getToolDescription(for: call.toolName)
-                                )
-                            }
-                            return ToolCallInfo(
-                                toolName: call.toolName,
-                                toolDescription: self.getToolDescription(for: call.toolName),
-                                arguments: call.arguments,
-                                status: {
-                                    switch call.status {
-                                    case .pending: return .pending
-                                    case .executing: return .executing
-                                    case .completed: return .completed
-                                    case .failed: return .failed
-                                    }
-                                }(),
-                                result: call.result,
-                                error: call.error,
-                                transcriptID: call.transcriptID
-                            )
-                        }
-                        self.updateInFlightAssistantMessage(
-                            content: latestText,
-                            toolCalls: lastToolCalls,
-                            reasoningContent: latestReasoning,
-                            reasoningDuration: displayedReasoningDuration(),
-                            reasoningTokenCount: latestReasoningTokenCount
-                        )
-                    case .reasoningUpdated(let content, let tokenCount):
-                        if hasUsableReasoningText(content) {
-                            latestReasoning = content
-                            startReasoningClockIfNeeded()
-                        }
-                        if let tokenCount {
-                            let grew = tokenCount > (latestReasoningTokenCount ?? 0)
-                            latestReasoningTokenCount = tokenCount
-                            if grew {
-                                startReasoningClockIfNeeded()
-                            }
-                        }
-                        self.updateInFlightAssistantMessage(
-                            content: latestText,
-                            toolCalls: hasSeenToolCalls ? lastToolCalls : [],
-                            reasoningContent: latestReasoning,
-                            reasoningDuration: displayedReasoningDuration(),
-                            reasoningTokenCount: latestReasoningTokenCount
-                        )
+                        assembler.applyToolCalls(self.resolvedToolCalls(calls, existing: assembler.toolCalls))
+                        self.updateGenerationPhaseForToolCalls(assembler.toolCalls, modelName: chat.model.displayName)
+                    case .reasoningUpdated(let content, let tokenCount, let entryCount):
+                        assembler.applyReasoning(content, tokenCount: tokenCount, entryCount: entryCount)
                     }
+                    self.publishAssembledMessage(assembler, id: assistantMessageId)
                     self.refreshContextUsage()
                 }
             }
 
             await MainActor.run {
-                if latestReasoningTokenCount == nil {
-                    latestReasoningTokenCount = self.contextUsage?.reasoningTokens
+                guard self.isCurrentGeneration(epoch) else { return }
+                if assembler.reasoningTokenCount == nil {
+                    assembler.reasoningTokenCount = self.contextUsage?.reasoningTokens
                 }
-                if let start = reasoningStartDate {
-                    latestReasoningDuration = Date().timeIntervalSince(start)
-                    reasoningStartDate = nil
-                }
-                self.updateInFlightAssistantMessage(
-                    content: latestText,
-                    toolCalls: hasSeenToolCalls ? lastToolCalls : [],
-                    reasoningContent: latestReasoning,
-                    reasoningDuration: displayedReasoningDuration(),
-                    reasoningTokenCount: latestReasoningTokenCount
-                )
+                assembler.finalize()
+                self.publishAssembledMessage(assembler, id: assistantMessageId)
                 self.isLoading = false
                 self.generationPhase = .idle
+                self.generationTask = nil
                 self.refreshContextUsage()
                 self.saveChats()
             }
         } catch {
             await MainActor.run {
+                guard self.isCurrentGeneration(epoch) else { return }
+                if error is CancellationError || Task.isCancelled {
+                    assembler.finalize()
+                    self.publishAssembledMessage(assembler, id: assistantMessageId)
+                    self.finishStoppedGeneration(assistantMessageId: assistantMessageId)
+                    return
+                }
+
                 let chatError = ChatError.fromError(error)
-                
+
                 if var currentChat = self.currentChat {
-                    if let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
-                        // Mark any existing tool calls as failed
-                        var failedToolCalls = lastToolCalls
-                        for i in failedToolCalls.indices {
-                            failedToolCalls[i].status = .failed
-                            failedToolCalls[i].error = error.localizedDescription
-                        }
-                        
+                    if let lastIndex = currentChat.messages.firstIndex(where: { $0.id == assistantMessageId }) {
+                        assembler.failToolCalls(error.localizedDescription)
+                        assembler.finalize()
                         let existingModel = currentChat.messages[lastIndex].model ?? currentChat.model
                         currentChat.messages[lastIndex] = ChatMessage(
                             content: chatError.description,
                             isUser: false,
                             error: chatError,
-                            toolCalls: failedToolCalls,
+                            toolCalls: assembler.toolCalls,
+                            reasoningContent: assembler.reasoningContent,
+                            reasoningDuration: assembler.reasoningDuration,
+                            reasoningTokenCount: assembler.reasoningTokenCount,
+                            transcriptBlocks: assembler.blocks,
                             model: existingModel
                         )
                         self.currentChat = currentChat
@@ -1139,6 +1122,7 @@ class ChatManager: ObservableObject {
                 }
                 self.isLoading = false
                 self.generationPhase = .idle
+                self.generationTask = nil
                 self.refreshContextUsage()
                 self.saveChats()
             }
@@ -1147,7 +1131,7 @@ class ChatManager: ObservableObject {
 
     private func initialGenerationPhase(for model: LLMModelChoice) -> ChatGenerationPhase {
         #if AFM_MLX
-        if #available(iOS 27, *), case .mlx(let id) = model, !MLXRuntime.shared.isWarmed(id) {
+        if case .mlx(let id) = model, !MLXRuntime.shared.isWarmed(id) {
             return .loadingModel(name: model.displayName, fraction: nil)
         }
         #endif
@@ -1161,21 +1145,28 @@ class ChatManager: ObservableObject {
         }
     }
 
-    private func prepareThenRespond(prompt: LLMPrompt, chat: Chat) async {
+    private func prepareThenRespond(
+        prompt: LLMPrompt,
+        chat: Chat,
+        assistantMessageId: UUID,
+        epoch: UInt64
+    ) async {
         do {
             try await prepareModelIfNeeded(chat.model)
+            try Task.checkCancellation()
         } catch {
-            if error is CancellationError {
+            if error is CancellationError || Task.isCancelled {
                 await MainActor.run {
-                    self.isLoading = false
-                    self.generationPhase = .idle
+                    guard self.isCurrentGeneration(epoch) else { return }
+                    self.finishStoppedGeneration(assistantMessageId: assistantMessageId)
                 }
                 return
             }
             await MainActor.run {
+                guard self.isCurrentGeneration(epoch) else { return }
                 let chatError = ChatError.fromError(error)
                 if var currentChat = self.currentChat,
-                   let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
+                   let lastIndex = currentChat.messages.firstIndex(where: { $0.id == assistantMessageId }) {
                     let existingModel = currentChat.messages[lastIndex].model ?? currentChat.model
                     currentChat.messages[lastIndex] = ChatMessage(
                         content: chatError.description,
@@ -1187,12 +1178,14 @@ class ChatManager: ObservableObject {
                 }
                 self.isLoading = false
                 self.generationPhase = .idle
+                self.generationTask = nil
                 self.saveChats()
             }
             return
         }
 
         await MainActor.run {
+            guard self.isCurrentGeneration(epoch) else { return }
             self.generationPhase = .generating(name: chat.model.displayName)
         }
         let capabilities = AttachmentMediaSupport.capabilities(for: chat.model)
@@ -1205,6 +1198,13 @@ class ChatManager: ObservableObject {
             attachments: prompt.attachments + historyAttachments,
             capabilities: capabilities
         )
+        if Task.isCancelled {
+            await MainActor.run {
+                guard self.isCurrentGeneration(epoch) else { return }
+                self.finishStoppedGeneration(assistantMessageId: assistantMessageId)
+            }
+            return
+        }
         let preparedPrompt = AttachmentMediaSupport.preparePrompt(
             prompt,
             capabilities: capabilities,
@@ -1214,6 +1214,7 @@ class ChatManager: ObservableObject {
             let upToMessage = chat.messages.last(where: \.isUser)?.id
             let outgoingAttachments = chat.messages.last(where: \.isUser)?.attachments ?? []
             await MainActor.run {
+                guard self.isCurrentGeneration(epoch) else { return }
                 let newSession = self.createSessionForChat(
                     chatId: chatId,
                     upToMessage: upToMessage,
@@ -1222,14 +1223,25 @@ class ChatManager: ObservableObject {
                 self.sessions[chatId] = newSession
             }
         }
-        await processLLMResponse(prompt: preparedPrompt, chat: chat)
+        guard isCurrentGeneration(epoch), !Task.isCancelled else {
+            await MainActor.run {
+                guard self.isCurrentGeneration(epoch) else { return }
+                self.finishStoppedGeneration(assistantMessageId: assistantMessageId)
+            }
+            return
+        }
+        await processLLMResponse(
+            prompt: preparedPrompt,
+            chat: chat,
+            assistantMessageId: assistantMessageId,
+            epoch: epoch
+        )
     }
 
     /// Loads GPU weights only for an in-flight send. Browsing other chats or
     /// switching models leaves the last resident model in memory until then.
     private func prepareModelIfNeeded(_ model: LLMModelChoice) async throws {
         #if AFM_MLX
-        guard #available(iOS 27, *) else { return }
         let keepID = model.mlxModelID
         let pipelineTag = keepID.flatMap { DownloadedModelStore.pipelineTag(for: $0) }
         releaseSessions(keepingMLX: keepID)
@@ -1247,21 +1259,74 @@ class ChatManager: ObservableObject {
         #endif
     }
 
+    private func publishAssembledMessage(_ assembler: AssistantTranscriptAssembler, id: UUID) {
+        updateInFlightAssistantMessage(
+            id: id,
+            content: assembler.content,
+            toolCalls: assembler.toolCalls,
+            reasoningContent: assembler.reasoningContent,
+            reasoningDuration: assembler.reasoningDuration,
+            reasoningTokenCount: assembler.reasoningTokenCount,
+            transcriptBlocks: assembler.blocks
+        )
+    }
+
+    private func resolvedToolCalls(_ calls: [LLMToolCallEvent], existing: [ToolCallInfo]) -> [ToolCallInfo] {
+        calls.map { call in
+            let match = existing.first { candidate in
+                if candidate.transcriptID == call.transcriptID {
+                    return true
+                }
+                guard candidate.toolName == call.toolName else { return false }
+                if candidate.arguments == call.arguments {
+                    return true
+                }
+                let candidateIsActive = candidate.status == .executing || candidate.status == .pending
+                return candidateIsActive && call.result == nil && call.error == nil
+            }
+            if let match {
+                return match.updated(
+                    from: call,
+                    toolDescription: getToolDescription(for: call.toolName)
+                )
+            }
+            let status: ToolCallStatus
+            switch call.status {
+            case .pending: status = .pending
+            case .executing: status = .executing
+            case .completed: status = .completed
+            case .failed: status = .failed
+            }
+            return ToolCallInfo(
+                toolName: call.toolName,
+                toolDescription: getToolDescription(for: call.toolName),
+                arguments: call.arguments,
+                status: status,
+                result: call.result,
+                error: call.error,
+                transcriptID: call.transcriptID
+            )
+        }
+    }
+
     private func updateInFlightAssistantMessage(
+        id: UUID,
         content: String,
         toolCalls: [ToolCallInfo],
         reasoningContent: String?,
         reasoningDuration: TimeInterval? = nil,
-        reasoningTokenCount: Int? = nil
+        reasoningTokenCount: Int? = nil,
+        transcriptBlocks: [ChatTranscriptBlock] = []
     ) {
         guard var chat = currentChat else { return }
-        guard let lastIndex = chat.messages.lastIndex(where: { !$0.isUser }) else { return }
+        guard let lastIndex = chat.messages.firstIndex(where: { $0.id == id }) else { return }
         chat.messages[lastIndex] = chat.messages[lastIndex].updatedForStreaming(
             content: content,
             toolCalls: toolCalls,
             reasoningContent: reasoningContent,
             reasoningDuration: reasoningDuration,
-            reasoningTokenCount: reasoningTokenCount
+            reasoningTokenCount: reasoningTokenCount,
+            transcriptBlocks: transcriptBlocks
         )
         updateStoredChat(chat)
     }
@@ -1270,19 +1335,280 @@ class ChatManager: ObservableObject {
         guard id.isAvailable else { return false }
         switch id {
         case .codeInterpreter:
-            chat?.toolCodeInterpreterEnabled ?? true
+            return chat?.toolCodeInterpreterEnabled ?? true
         case .webSearch:
-            chat?.toolWebSearchEnabled ?? true
+            return chat?.toolWebSearchEnabled ?? true
         case .webFetch:
-            chat?.toolWebFetchEnabled ?? true
+            return chat?.toolWebFetchEnabled ?? true
         case .readAttachment:
-            true
+            return true
         }
     }
 
     private func getToolDescription(for toolName: String) -> String {
         AppToolCatalog.resolve(toolName)?.description ?? "Execute tool: \(toolName)"
     }
+
+    private func updateGenerationPhaseForToolCalls(_ toolCalls: [ToolCallInfo], modelName: String) {
+        if let running = toolCalls.last(where: { $0.status == .pending || $0.status == .executing }) {
+            generationPhase = .runningTool(name: running.toolName)
+        } else if isLoading, case .runningTool = generationPhase {
+            generationPhase = .generating(name: modelName)
+        }
+    }
     
     
-} 
+}
+
+@MainActor
+private final class AssistantTranscriptAssembler {
+    private(set) var blocks: [ChatTranscriptBlock] = []
+    private(set) var toolCalls: [ToolCallInfo] = []
+    var reasoningTokenCount: Int?
+
+    private var previousReasoning = ""
+    private var previousText = ""
+    private var committedTextPrefix = ""
+    private var reasoningStartDate: Date?
+    private var reasoningEntryCount = 0
+
+    var content: String {
+        textContents.joined(separator: "\n\n")
+    }
+
+    var reasoningContent: String? {
+        let parts = blocks.compactMap { block -> String? in
+            guard case .reasoning(_, let content, _) = block else { return nil }
+            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : content
+        }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: "\n\n")
+    }
+
+    var reasoningDuration: TimeInterval? {
+        let durations = blocks.compactMap { block -> TimeInterval? in
+            guard case .reasoning(_, _, let duration) = block else { return nil }
+            return duration
+        }
+        guard !durations.isEmpty else { return nil }
+        return durations.reduce(0, +)
+    }
+
+    func startPlaceholderThinking() {
+        if isReasoningClockRunning {
+            refreshOpenReasoningDuration()
+            return
+        }
+        if case .reasoning(_, let content, _) = blocks.last,
+           content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            reasoningStartDate = Date()
+            refreshOpenReasoningDuration()
+            return
+        }
+        blocks.append(.reasoning(id: UUID(), content: "", duration: 0))
+        reasoningStartDate = Date()
+        refreshOpenReasoningDuration()
+    }
+
+    func applyReasoning(_ full: String?, tokenCount: Int? = nil, entryCount: Int? = nil) {
+        if let entryCount, entryCount > reasoningEntryCount {
+            reasoningEntryCount = entryCount
+            startPlaceholderThinking()
+        }
+        if let tokenCount {
+            let grew = tokenCount > (reasoningTokenCount ?? 0)
+            reasoningTokenCount = tokenCount
+            if grew {
+                startReasoningClockFromTokenGrowthIfNeeded()
+            }
+        }
+
+        let raw = full ?? ""
+        let usable = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer { previousReasoning = raw }
+
+        guard !usable.isEmpty else {
+            refreshOpenReasoningDuration()
+            return
+        }
+
+        let delta: String
+        if raw.hasPrefix(previousReasoning) {
+            delta = String(raw.dropFirst(previousReasoning.count))
+        } else {
+            delta = usable
+        }
+        let trimmedDelta = delta.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if case .reasoning(let id, let content, let duration) = blocks.last {
+            if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, trimmedDelta.isEmpty {
+                refreshOpenReasoningDuration()
+                return
+            }
+            let nextContent = mergedReasoning(existing: content, delta: delta, usable: usable)
+            blocks[blocks.count - 1] = .reasoning(id: id, content: nextContent, duration: duration)
+            if reasoningStartDate == nil {
+                reasoningStartDate = Date()
+            }
+        } else {
+            closeTextIfNeeded()
+            let nextContent: String
+            if raw.hasPrefix(previousReasoning) {
+                nextContent = trimmedDelta
+            } else if let stored = reasoningContent, usable.hasPrefix(stored), !stored.isEmpty {
+                nextContent = String(usable.dropFirst(stored.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                nextContent = usable
+            }
+            guard !nextContent.isEmpty else {
+                refreshOpenReasoningDuration()
+                return
+            }
+            blocks.append(.reasoning(id: UUID(), content: nextContent, duration: 0))
+            reasoningStartDate = Date()
+        }
+        refreshOpenReasoningDuration()
+    }
+
+    func applyContent(_ fullText: String) {
+        let usable = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer { previousText = fullText }
+        guard !usable.isEmpty else { return }
+        if isStaleContentSnapshot(fullText) {
+            return
+        }
+
+        closeReasoningIfNeeded()
+
+        if case .text(let id, let current) = blocks.last {
+            if fullText.hasPrefix(committedTextPrefix) {
+                let remainder = strippedLeadingSeparators(String(fullText.dropFirst(committedTextPrefix.count)))
+                blocks[blocks.count - 1] = .text(id: id, content: remainder.isEmpty ? current : remainder)
+            } else if fullText.hasPrefix(current) || current.hasPrefix(fullText) {
+                blocks[blocks.count - 1] = .text(id: id, content: fullText)
+            } else {
+                blocks.append(.text(id: UUID(), content: usable))
+            }
+        } else if fullText.hasPrefix(committedTextPrefix), !committedTextPrefix.isEmpty {
+            let remainder = strippedLeadingSeparators(String(fullText.dropFirst(committedTextPrefix.count)))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !remainder.isEmpty else { return }
+            blocks.append(.text(id: UUID(), content: remainder))
+        } else {
+            blocks.append(.text(id: UUID(), content: fullText))
+        }
+    }
+
+    func applyToolCalls(_ calls: [ToolCallInfo]) {
+        toolCalls = calls
+        var seen = Set(blocks.compactMap { block -> UUID? in
+            guard case .tool(let id) = block else { return nil }
+            return id
+        })
+        for call in calls {
+            guard !seen.contains(call.id) else { continue }
+            closeReasoningIfNeeded()
+            closeTextIfNeeded()
+            blocks.append(.tool(id: call.id))
+            seen.insert(call.id)
+        }
+        refreshOpenReasoningDuration()
+    }
+
+    func failToolCalls(_ error: String) {
+        for index in toolCalls.indices {
+            toolCalls[index].status = .failed
+            toolCalls[index].error = error
+        }
+    }
+
+    func finalize() {
+        closeReasoningIfNeeded()
+        refreshOpenReasoningDuration()
+    }
+
+    func refreshOpenReasoningDuration() {
+        guard let reasoningStartDate, case .reasoning(let id, let content, _) = blocks.last else { return }
+        let duration = Date().timeIntervalSince(reasoningStartDate)
+        blocks[blocks.count - 1] = .reasoning(id: id, content: content, duration: duration)
+    }
+
+    private var textContents: [String] {
+        blocks.compactMap { block in
+            guard case .text(_, let content) = block else { return nil }
+            return content
+        }
+    }
+
+    private var isReasoningClockRunning: Bool {
+        guard reasoningStartDate != nil else { return false }
+        if case .reasoning = blocks.last { return true }
+        return false
+    }
+
+    private func startReasoningClockFromTokenGrowthIfNeeded() {
+        switch blocks.last {
+        case .none, .tool:
+            startPlaceholderThinking()
+        case .reasoning:
+            if reasoningStartDate == nil {
+                startPlaceholderThinking()
+            }
+        case .text:
+            break
+        }
+    }
+
+    private func isStaleContentSnapshot(_ fullText: String) -> Bool {
+        if fullText == previousText {
+            return true
+        }
+        guard !committedTextPrefix.isEmpty, fullText.hasPrefix(committedTextPrefix) else {
+            return false
+        }
+        let remainder = strippedLeadingSeparators(String(fullText.dropFirst(committedTextPrefix.count)))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return remainder.isEmpty
+    }
+
+    private func closeReasoningIfNeeded() {
+        guard let start = reasoningStartDate else { return }
+        if case .reasoning(let id, let content, _) = blocks.last {
+            blocks[blocks.count - 1] = .reasoning(
+                id: id,
+                content: content,
+                duration: Date().timeIntervalSince(start)
+            )
+        }
+        reasoningStartDate = nil
+    }
+
+    private func closeTextIfNeeded() {
+        if case .text = blocks.last {
+            committedTextPrefix = previousText
+        }
+    }
+
+    private func mergedReasoning(existing: String, delta: String, usable: String) -> String {
+        let trimmedDelta = delta.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existing.isEmpty {
+            return trimmedDelta.isEmpty ? usable : trimmedDelta
+        }
+        if trimmedDelta.isEmpty {
+            return existing
+        }
+        if delta.hasPrefix("\n\n") {
+            return existing + "\n\n" + trimmedDelta
+        }
+        if usable.hasPrefix(existing) {
+            return usable
+        }
+        return existing + delta
+    }
+
+    private func strippedLeadingSeparators(_ text: String) -> String {
+        String(text.drop(while: { $0.isNewline }))
+    }
+}
+

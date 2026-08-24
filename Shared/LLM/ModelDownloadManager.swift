@@ -120,7 +120,7 @@ enum DownloadByteFormat {
 }
 
 enum ModelMemoryFit {
-    static let warningRatio = 0.9
+    static let warningRatio = 0.8
 
     static var deviceMemoryBytes: UInt64 {
         ProcessInfo.processInfo.physicalMemory
@@ -285,11 +285,6 @@ final class ModelDownloadManager: ObservableObject {
     }
 
     private func runDownload(_ item: ModelDownloadItem) async {
-        guard #available(iOS 27, *) else {
-            fail(item.id, message: "Custom models require iOS 27 or later.")
-            return
-        }
-
         do {
             try Task.checkCancellation()
             let modelID = item.id

@@ -24,6 +24,7 @@ struct ChatInputBar: View {
     let isSpeechPreparing: Bool
     let pendingAttachments: [ChatMessageAttachment]
     let onSend: () -> Void
+    let onStop: () -> Void
     let onMicTap: () -> Void
     let onPickPhoto: () -> Void
     let onTakePhoto: () -> Void
@@ -73,13 +74,19 @@ struct ChatInputBar: View {
                             .lineLimit(1...6)
                             .disabled(isLoading)
                             .focused($isFocused)
-                            .onSubmit(onSend)
-                            .onKeyPress(keys: [.return]) { press in
-                                if press.modifiers == .shift {
-                                    text += "\n"
-                                    return .handled
+                            .onSubmit {
+                                if canSend {
+                                    onSend()
                                 }
-                                return .ignored
+                            }
+                            .onKeyPress(keys: [.return], phases: .down) { press in
+                                if press.modifiers.contains(.shift) || press.modifiers.contains(.option) {
+                                    return .ignored
+                                }
+                                if canSend {
+                                    onSend()
+                                }
+                                return .handled
                             }
 
                         if showsModelPicker {
@@ -200,8 +207,14 @@ struct ChatInputBar: View {
     private var sendSlot: some View {
         ZStack {
             if isLoading {
-                ProgressView()
-                    .scaleEffect(0.7)
+                Button(action: onStop) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(width: sendButtonSize, height: sendButtonSize)
+                        .background(Circle().fill(.white))
+                }
+                .accessibilityLabel("Stop generating")
             } else {
                 Button(action: onSend) {
                     Image(systemName: isEditing ? "checkmark" : "arrow.up")

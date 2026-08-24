@@ -3,7 +3,6 @@ internal import Combine
 
 #if AFM_MLX
 import HuggingFace
-import MLXFoundationModels
 #endif
 
 nonisolated struct DownloadedMLXModel: Codable, Identifiable, Hashable, Sendable {
@@ -553,9 +552,7 @@ final class DownloadedModelStore: ObservableObject {
     func remove(_ id: String) async {
         ModelDownloadManager.shared.cancel(id)
         #if AFM_MLX
-        if #available(iOS 27, *) {
-            await MLXRuntime.shared.unload(id)
-        }
+        await MLXRuntime.shared.unload(id)
         #endif
         try? HuggingFaceCache.remove(id)
         models.removeAll { $0.id == id }

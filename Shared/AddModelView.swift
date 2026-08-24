@@ -1,6 +1,5 @@
 import SwiftUI
 
-@available(iOS 27, *)
 struct AddModelView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var downloadedStore = DownloadedModelStore.shared

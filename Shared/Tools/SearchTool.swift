@@ -188,8 +188,13 @@ struct SearchTool: Tool {
     }
     
     func call(arguments: Arguments) async throws -> [String] {
-        ToolExecutionTracker.begin(toolName: name, arguments: ["query": arguments.query])
-        defer { ToolExecutionTracker.end(toolName: name, arguments: ["query": arguments.query]) }
+        await Self.run(query: arguments.query)
+    }
+
+    static func run(query: String) async -> [String] {
+        let name = definition.displayName
+        ToolExecutionTracker.begin(toolName: name, arguments: ["query": query])
+        defer { ToolExecutionTracker.end(toolName: name, arguments: ["query": query]) }
 
         do {
             // Prepare the request to exa.ai search API
@@ -209,7 +214,7 @@ struct SearchTool: Tool {
             let requestBody: [String: Any] = [
                 "numResults": 10,
                 "text": true,
-                "query": arguments.query,
+                "query": query,
                 "fastMode": true
             ]
             
@@ -229,7 +234,7 @@ struct SearchTool: Tool {
             let results = payload.results
             
             if results.isEmpty {
-                return ["No search results found for '\(arguments.query)'. Try different keywords or phrases."]
+                return ["No search results found for '\(query)'. Try different keywords or phrases."]
             }
             
             // var output = "Here are the search results for \"\(arguments.query)\". Summarize the results in a way that is helpful to the user."

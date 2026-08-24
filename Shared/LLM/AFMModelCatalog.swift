@@ -21,19 +21,21 @@ enum AFMModelCatalog {
                     unavailabilityNote: unavailabilityNote(for: .privateCloudCompute)
                 )
             )
-
-            for model in DownloadedModelStore.storedModels() {
-                let choice = LLMModelChoice.mlx(id: model.id)
-                options.append(
-                    LLMModelOption(
-                        choice: choice,
-                        isAvailable: isModelAvailable(choice),
-                        supportsReasoning: supportsReasoning(choice),
-                        unavailabilityNote: unavailabilityNote(for: choice)
-                    )
-                )
-            }
         }
+
+        #if AFM_MLX
+        for model in DownloadedModelStore.storedModels() {
+            let choice = LLMModelChoice.mlx(id: model.id)
+            options.append(
+                LLMModelOption(
+                    choice: choice,
+                    isAvailable: isModelAvailable(choice),
+                    supportsReasoning: supportsReasoning(choice),
+                    unavailabilityNote: unavailabilityNote(for: choice)
+                )
+            )
+        }
+        #endif
 
         return options
     }
@@ -67,11 +69,10 @@ enum AFMModelCatalog {
             return "Private Cloud Compute requires iOS 27 or later."
         case .mlx:
             #if AFM_MLX
-            if #available(iOS 27, *) {
-                return "This MLX model is not downloaded. Add it from the model picker."
-            }
+            return "This MLX model is not downloaded. Add it from the model picker."
+            #else
+            return "Custom MLX models are not available in this build."
             #endif
-            return "Custom MLX models require iOS 27 or later."
         }
     }
 
@@ -125,12 +126,10 @@ enum AFMModelCatalog {
             return false
         case .mlx(let id):
             #if AFM_MLX
-            if #available(iOS 27, *) {
-                // Mirrors MLXLanguageModel.availability == .available (weights on disk).
-                return HuggingFaceCache.isDownloaded(id)
-            }
-            #endif
+            return HuggingFaceCache.isDownloaded(id)
+            #else
             return false
+            #endif
         }
     }
 
@@ -177,25 +176,31 @@ enum AFMModelCatalog {
         return resolved
     }
 
+    static func resolvedDefaultModel() -> LLMModelChoice {
+        let stored = LLMModelChoice(
+            rawValue: UserDefaults.standard.string(forKey: "model") ?? LLMModelChoice.onDevice.rawValue
+        ) ?? .onDevice
+        if isModelAvailable(stored) {
+            return stored
+        }
+        #if AFM_MLX
+        if let downloaded = DownloadedModelStore.storedModels().first(where: { HuggingFaceCache.isDownloaded($0.id) }) {
+            return .mlx(id: downloaded.id)
+        }
+        #endif
+        return .onDevice
+    }
+
     @available(iOS 27, *)
     static func languageModel(
         for choice: LLMModelChoice,
         guardrails: LLMGuardrailsMode = .default
     ) -> any LanguageModel {
         switch choice {
-        case .onDevice:
+        case .onDevice, .mlx:
             return systemLanguageModel(guardrails: guardrails)
         case .privateCloudCompute:
             return PrivateCloudComputeLanguageModel()
-        case .mlx(let id):
-            #if AFM_MLX
-            return MLXModelFactory.makeLanguageModel(
-                id: id,
-                pipelineTag: DownloadedModelStore.pipelineTag(for: id)
-            )
-            #else
-            return systemLanguageModel(guardrails: guardrails)
-            #endif
         }
     }
 
@@ -208,12 +213,13 @@ enum AFMModelCatalog {
         }
     }
 
-    @available(iOS 27, *)
     static func contextSize(for choice: LLMModelChoice) async throws -> Int {
         switch choice {
         case .onDevice:
+            guard #available(iOS 27, *) else { return 4096 }
             return SystemLanguageModel.default.contextSize
         case .privateCloudCompute:
+            guard #available(iOS 27, *) else { return 4096 }
             return try await PrivateCloudComputeLanguageModel().contextSize
         case .mlx(let id):
             if let size = HuggingFaceCache.contextSize(for: id) {
@@ -223,15 +229,15 @@ enum AFMModelCatalog {
         }
     }
 
-    @available(iOS 27, *)
     static func allContextSizes() async -> [LLMModelChoice: Int] {
-        var sizes: [LLMModelChoice: Int] = [
-            .onDevice: SystemLanguageModel.default.contextSize
-        ]
+        var sizes: [LLMModelChoice: Int] = [:]
 
-        if AFMEntitlements.hasPrivateCloudCompute, isModelAvailable(.privateCloudCompute) {
-            if let pccSize = try? await PrivateCloudComputeLanguageModel().contextSize {
-                sizes[.privateCloudCompute] = pccSize
+        if #available(iOS 27, *) {
+            sizes[.onDevice] = SystemLanguageModel.default.contextSize
+            if AFMEntitlements.hasPrivateCloudCompute, isModelAvailable(.privateCloudCompute) {
+                if let pccSize = try? await PrivateCloudComputeLanguageModel().contextSize {
+                    sizes[.privateCloudCompute] = pccSize
+                }
             }
         }
 

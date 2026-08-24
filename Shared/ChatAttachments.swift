@@ -9,10 +9,7 @@ import UniformTypeIdentifiers
 
 enum ChatAttachments {
     static var isSupported: Bool {
-        if #available(iOS 27, *) {
-            return true
-        }
-        return false
+        true
     }
 
     static var storageDirectory: URL {

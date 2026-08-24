@@ -38,6 +38,18 @@ final class AFMClient: LLMClient {
     }
 
     func createSession(instructions: String, tools: [LLMTool], configuration: LLMSessionConfiguration) -> LLMSession {
+        #if AFM_MLX
+        if let modelID = configuration.model.mlxModelID {
+            return MLXSession(
+                modelID: modelID,
+                instructions: instructions,
+                configuration: configuration,
+                enabledToolIDs: mlxToolIDs(from: tools),
+                attachmentRegistry: mlxAttachmentRegistry(from: tools)
+            )
+        }
+        #endif
+
         let afmTools: [any Tool] = tools.compactMap { tool in
             if let anyTool = tool as? AnyLLMTool,
                let afmTool = anyTool.providerPayloads["afmTool"] as? any Tool {
@@ -53,11 +65,32 @@ final class AFMClient: LLMClient {
         )
         return AFMSession(
             session: session,
-            configuration: configuration,
-            instructions: instructions,
-            tools: afmTools
+            configuration: configuration
         )
     }
+
+    #if AFM_MLX
+    private func mlxToolIDs(from tools: [LLMTool]) -> [AppToolID] {
+        tools.compactMap { tool in
+            guard let anyTool = tool as? AnyLLMTool,
+                  let raw = anyTool.providerPayloads["toolID"] as? String
+            else {
+                return nil
+            }
+            return AppToolID(rawValue: raw)
+        }
+    }
+
+    private func mlxAttachmentRegistry(from tools: [LLMTool]) -> AttachmentRegistry? {
+        for tool in tools {
+            if let anyTool = tool as? AnyLLMTool,
+               let registry = anyTool.providerPayloads["attachmentRegistry"] as? AttachmentRegistry {
+                return registry
+            }
+        }
+        return nil
+    }
+    #endif
 }
 
 private struct TranscriptExtraction {
@@ -70,6 +103,7 @@ private struct ReasoningSnapshot {
     var content: String?
     var tokenCount: Int?
     var signatureByteCount: Int?
+    var entryCount: Int
 }
 
 private actor StreamToolCallEmitter {
@@ -92,32 +126,21 @@ private actor StreamToolCallEmitter {
 private final class AFMSession: LLMSession {
     private let session: LanguageModelSession
     private let configuration: LLMSessionConfiguration
-    private let instructions: String
-    #if AFM_MLX
-    private let tools: [any Tool]
-    #endif
     private let pipeline: AFMSessionPipeline
     private var lastMaxContentLength: Int = 0
     private var lastReasoningSignature: Int = 0
     private var lastReasoningProbeSignature: Int = 0
     private var lastYieldedReasoningTokenCount: Int?
+    private var lastYieldedReasoningEntryCount = 0
     private var didLogReasoningSignatureDump = false
     private var streamChunkIndex: Int = 0
 
     init(
         session: LanguageModelSession,
-        configuration: LLMSessionConfiguration,
-        instructions: String,
-        tools: [any Tool]
+        configuration: LLMSessionConfiguration
     ) {
         self.session = session
         self.configuration = configuration
-        self.instructions = instructions
-        #if AFM_MLX
-        self.tools = tools
-        #else
-        _ = tools
-        #endif
         self.pipeline = AFMSessionPipeline.current
     }
 
@@ -139,29 +162,16 @@ private final class AFMSession: LLMSession {
     }
 
     func streamResponse(to prompt: LLMPrompt, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
-        #if AFM_MLX
-        if #available(iOS 27, *), let modelID = configuration.model.mlxModelID {
-            return MLXTokenStream.events(
-                modelID: modelID,
-                instructions: instructions,
-                history: configuration.history,
-                prompt: prompt,
-                temperature: temperature,
-                thinkingEnabled: configuration.thinkingEnabled,
-                thinkingBudgetTokens: configuration.thinkingBudgetTokens,
-                tools: tools
-            )
-        }
-        #endif
         return streamFoundationResponse(to: prompt, temperature: temperature)
     }
 
     private func streamFoundationResponse(to prompt: LLMPrompt, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 let toolCallEmitter = StreamToolCallEmitter()
                 ToolExecutionTracker.reset()
                 var pollingTask: Task<Void, Never>?
+                defer { pollingTask?.cancel() }
 
                 do {
                     let supportsReasoning = AFMModelCatalog.supportsReasoning(configuration.model)
@@ -170,6 +180,7 @@ private final class AFMSession: LLMSession {
                         streamChunkIndex = 0
                         lastReasoningProbeSignature = 0
                         lastYieldedReasoningTokenCount = nil
+                        lastYieldedReasoningEntryCount = 0
                         didLogReasoningSignatureDump = false
                         AFMReasoningProbe.log(
                             "stream start model=\(configuration.model.rawValue) level=\(configuration.reasoningLevel.rawValue) pipeline=\(self.pipeline)"
@@ -237,6 +248,7 @@ private final class AFMSession: LLMSession {
 
                     var bestContent = ""
                     for try await response in stream {
+                        try Task.checkCancellation()
                         streamChunkIndex += 1
                         if response.content.count > bestContent.count {
                             bestContent = response.content
@@ -311,6 +323,9 @@ private final class AFMSession: LLMSession {
                     continuation.finish(throwing: error)
                 }
             }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
         }
     }
 
@@ -371,11 +386,13 @@ private final class AFMSession: LLMSession {
             return trimmed.isEmpty ? nil : trimmed
         }
         let tokenCount = snapshot.tokenCount
+        let entryCount = snapshot.entryCount
 
         let contentSignature = content?.hashValue ?? 0
         let tokenChanged = tokenCount != lastYieldedReasoningTokenCount
         let contentChanged = content != nil && contentSignature != lastReasoningSignature
-        guard contentChanged || tokenChanged else { return }
+        let entriesChanged = entryCount > lastYieldedReasoningEntryCount
+        guard contentChanged || tokenChanged || entriesChanged else { return }
 
         if contentChanged {
             lastReasoningSignature = contentSignature
@@ -383,12 +400,15 @@ private final class AFMSession: LLMSession {
         if tokenChanged {
             lastYieldedReasoningTokenCount = tokenCount
         }
+        if entriesChanged {
+            lastYieldedReasoningEntryCount = entryCount
+        }
 
         AFMReasoningProbe.log(
-            "yielding reasoningUpdated chars=\(content?.count ?? 0) tokens=\(tokenCount.map(String.init) ?? "nil") signatureBytes=\(snapshot.signatureByteCount ?? 0)"
+            "yielding reasoningUpdated chars=\(content?.count ?? 0) tokens=\(tokenCount.map(String.init) ?? "nil") entries=\(entryCount) signatureBytes=\(snapshot.signatureByteCount ?? 0)"
                 + (content.map { " preview=\(AFMReasoningProbe.preview($0))" } ?? "")
         )
-        continuation.yield(.reasoningUpdated(content: content, tokenCount: tokenCount))
+        continuation.yield(.reasoningUpdated(content: content, tokenCount: tokenCount, entryCount: entryCount))
     }
 
     private func extractFromTranscript(
@@ -437,6 +457,8 @@ private final class AFMSession: LLMSession {
 
         let snapshotReasoning: String
         let turnReasoning: String
+        var snapshotEntryCount = 0
+        var turnEntryCount = 0
         var rawProbeDetails: String?
         var probeSignatureData: Data?
         var probeDescribing: String?
@@ -444,6 +466,7 @@ private final class AFMSession: LLMSession {
             if let preferredEntries {
                 let snapshotProbe = extractReasoningProbe(from: Array(preferredEntries), source: "snapshot")
                 snapshotReasoning = snapshotProbe.text
+                snapshotEntryCount = snapshotProbe.entryCount
                 rawProbeDetails = snapshotProbe.details
                 probeSignatureData = snapshotProbe.signatureData
                 probeDescribing = snapshotProbe.describing
@@ -452,6 +475,7 @@ private final class AFMSession: LLMSession {
             }
             let turnProbe = extractReasoningProbe(from: turnEntries, source: "turn")
             turnReasoning = turnProbe.text
+            turnEntryCount = turnProbe.entryCount
             if rawProbeDetails == nil || turnProbe.text.count > snapshotReasoning.count {
                 rawProbeDetails = turnProbe.details
                 probeSignatureData = turnProbe.signatureData
@@ -465,7 +489,8 @@ private final class AFMSession: LLMSession {
         let reasoningSnapshot = makeReasoningSnapshot(
             text: mergedReasoning,
             tokenCount: reasoningTokenCount,
-            signatureByteCount: probeSignatureData?.count
+            signatureByteCount: probeSignatureData?.count,
+            entryCount: max(snapshotEntryCount, turnEntryCount)
         )
 
         if let probeStreamChunk {
@@ -697,13 +722,15 @@ private final class AFMSession: LLMSession {
     private func makeReasoningSnapshot(
         text: String,
         tokenCount: Int?,
-        signatureByteCount: Int?
+        signatureByteCount: Int?,
+        entryCount: Int
     ) -> ReasoningSnapshot {
         let sanitized = sanitizeReasoningText(text)
         return ReasoningSnapshot(
             content: sanitized.isEmpty ? nil : sanitized,
             tokenCount: tokenCount,
-            signatureByteCount: signatureByteCount
+            signatureByteCount: signatureByteCount,
+            entryCount: entryCount
         )
     }
 
@@ -731,14 +758,16 @@ private final class AFMSession: LLMSession {
     private func extractReasoningProbe(
         from entries: [Transcript.Entry],
         source: String
-    ) -> (text: String, details: String, signatureData: Data?, describing: String?) {
+    ) -> (text: String, details: String, signatureData: Data?, describing: String?, entryCount: Int) {
         var reasoningContent = ""
         var detailParts: [String] = []
         var signatureData: Data?
         var describing: String?
+        var entryCount = 0
 
         for entry in entries {
             guard case .reasoning(let reasoning) = entry else { continue }
+            entryCount += 1
             let segmentText = reasoningText(from: reasoning)
             let descriptionText = reasoning.description.trimmingCharacters(in: .whitespacesAndNewlines)
             let describingText = String(describing: reasoning)
@@ -781,7 +810,7 @@ private final class AFMSession: LLMSession {
             reasoningContent += preferredText
         }
 
-        return (reasoningContent, detailParts.joined(separator: " || "), signatureData, describing)
+        return (reasoningContent, detailParts.joined(separator: " || "), signatureData, describing, entryCount)
     }
 
     private func textFromSegments(_ segments: [Transcript.Segment]) -> String {
@@ -804,3 +833,51 @@ private final class AFMSession: LLMSession {
         }.joined(separator: "\n")
     }
 }
+
+#if AFM_MLX
+private final class MLXSession: LLMSession {
+    private let modelID: String
+    private let instructions: String
+    private let configuration: LLMSessionConfiguration
+    private let enabledToolIDs: [AppToolID]
+    private let attachmentRegistry: AttachmentRegistry?
+
+    init(
+        modelID: String,
+        instructions: String,
+        configuration: LLMSessionConfiguration,
+        enabledToolIDs: [AppToolID],
+        attachmentRegistry: AttachmentRegistry?
+    ) {
+        self.modelID = modelID
+        self.instructions = instructions
+        self.configuration = configuration
+        self.enabledToolIDs = enabledToolIDs
+        self.attachmentRegistry = attachmentRegistry
+    }
+
+    func respond(to prompt: String, temperature: Double) async throws -> String {
+        var text = ""
+        for try await event in streamResponse(to: LLMPrompt(text: prompt), temperature: temperature) {
+            if case .contentUpdated(let fullText) = event {
+                text = fullText
+            }
+        }
+        return text
+    }
+
+    func streamResponse(to prompt: LLMPrompt, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+        MLXTokenStream.events(
+            modelID: modelID,
+            instructions: instructions,
+            history: configuration.history,
+            prompt: prompt,
+            temperature: temperature,
+            thinkingEnabled: configuration.thinkingEnabled,
+            thinkingBudgetTokens: configuration.thinkingBudgetTokens,
+            enabledToolIDs: enabledToolIDs,
+            attachmentRegistry: attachmentRegistry
+        )
+    }
+}
+#endif

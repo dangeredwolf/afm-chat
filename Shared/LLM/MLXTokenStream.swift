@@ -1,11 +1,8 @@
 import Foundation
 
 #if AFM_MLX
-import FoundationModels
-import MLXFoundationModels
 import MLXLMCommon
 
-@available(iOS 27, *)
 nonisolated enum MLXTokenStream {
     static func events(
         modelID: String,
@@ -15,7 +12,8 @@ nonisolated enum MLXTokenStream {
         temperature: Double,
         thinkingEnabled: Bool,
         thinkingBudgetTokens: Int?,
-        tools: [any FoundationModels.Tool]
+        enabledToolIDs: [AppToolID],
+        attachmentRegistry: AttachmentRegistry?
     ) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task.detached {
@@ -28,7 +26,8 @@ nonisolated enum MLXTokenStream {
                         temperature: temperature,
                         thinkingEnabled: thinkingEnabled,
                         thinkingBudgetTokens: thinkingBudgetTokens,
-                        tools: tools,
+                        enabledToolIDs: enabledToolIDs,
+                        attachmentRegistry: attachmentRegistry,
                         continuation: continuation
                     )
                     continuation.finish()
@@ -50,14 +49,14 @@ nonisolated enum MLXTokenStream {
         temperature: Double,
         thinkingEnabled: Bool,
         thinkingBudgetTokens: Int?,
-        tools: [any FoundationModels.Tool],
+        enabledToolIDs: [AppToolID],
+        attachmentRegistry: AttachmentRegistry?,
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
     ) async throws {
-        let model = await MLXModelFactory.makeLanguageModel(
+        let container = try await MLXModelFactory.loadContainer(
             id: modelID,
             pipelineTag: DownloadedModelStore.pipelineTag(for: modelID)
         )
-        let container = try await model.loadContainer()
         let loadedConfig = await container.configuration.reasoningConfig
         let resolvedReasoning = resolveReasoningConfig(id: modelID, loaded: loadedConfig)
         let reasoningConfig = resolvedReasoning.config
@@ -78,9 +77,11 @@ nonisolated enum MLXTokenStream {
         let primedInside = isPrimedInside(
             thinkingEnabled: thinkingOn,
             config: reasoningConfig,
-            knownProtocol: resolvedReasoning.knownProtocol
+            knownProtocol: resolvedReasoning.knownProtocol,
+            modelID: modelID
         )
-        let toolSpecs = MLXToolBridge.specs(for: tools)
+        let toolSpecs = MLXToolBridge.specs(for: enabledToolIDs)
+        let enabledIDs = Set(enabledToolIDs)
         let state = StreamState(
             emitter: ReasoningEventEmitter(config: reasoningConfig, primedInside: primedInside)
         )
@@ -98,7 +99,8 @@ nonisolated enum MLXTokenStream {
                 : { @Sendable call in
                     try await dispatchTool(
                         call,
-                        tools: tools,
+                        enabledIDs: enabledIDs,
+                        attachmentRegistry: attachmentRegistry,
                         state: state,
                         continuation: continuation
                     )
@@ -132,7 +134,9 @@ nonisolated enum MLXTokenStream {
                         primedInside: primedInside
                     )
                 }
-                let segments = state.emitter.process(chunk)
+                let segments = state.emitter.process(
+                    normalizeReasoningChunk(chunk, modelID: modelID)
+                )
                 for segment in segments {
                     switch segment {
                     case .reasoning(let text):
@@ -144,7 +148,8 @@ nonisolated enum MLXTokenStream {
                         continuation.yield(
                             .reasoningUpdated(
                                 content: state.reasoningText,
-                                tokenCount: state.reasoningTokenCount
+                                tokenCount: state.reasoningTokenCount,
+                                entryCount: nil
                             )
                         )
                     case .response(let text):
@@ -158,21 +163,13 @@ nonisolated enum MLXTokenStream {
                     continuation.yield(
                         .reasoningUpdated(
                             content: state.reasoningText,
-                            tokenCount: state.reasoningTokenCount
+                            tokenCount: state.reasoningTokenCount,
+                            entryCount: nil
                         )
                     )
                 }
             case .toolCall(let call):
-                state.upsertToolCall(
-                    LLMToolCallEvent(
-                        transcriptID: call.id ?? UUID().uuidString,
-                        toolName: MLXToolBridge.displayName(for: call.function.name),
-                        toolDescription: MLXToolBridge.displayName(for: call.function.name),
-                        arguments: MLXToolBridge.encodeArguments(call.function.arguments),
-                        status: .pending
-                    )
-                )
-                continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
+                publishToolCall(call, status: .pending, state: state, continuation: continuation)
             case .rejectedToolCall:
                 break
             }
@@ -194,7 +191,11 @@ nonisolated enum MLXTokenStream {
                 addSpecialTokens: false
             ).count
             continuation.yield(
-                .reasoningUpdated(content: state.reasoningText, tokenCount: state.reasoningTokenCount)
+                .reasoningUpdated(
+                    content: state.reasoningText,
+                    tokenCount: state.reasoningTokenCount,
+                    entryCount: nil
+                )
             )
         }
         if !state.fullText.isEmpty {
@@ -204,37 +205,60 @@ nonisolated enum MLXTokenStream {
 
     private static func dispatchTool(
         _ call: ToolCall,
-        tools: [any FoundationModels.Tool],
+        enabledIDs: Set<AppToolID>,
+        attachmentRegistry: AttachmentRegistry?,
         state: StreamState,
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
     ) async throws -> String {
+        let transcriptID = publishToolCall(
+            call,
+            status: .executing,
+            state: state,
+            continuation: continuation
+        )
+        state.needsEmitterReset = true
+        // ChatSession holds Generation.toolCall until dispatch, and some tools
+        // (WKWebView fetch) then take the main thread. Flush the in-progress
+        // row to SwiftUI before that work starts or the transcript looks frozen.
+        await flushToolCallUI()
+        try Task.checkCancellation()
+
+        let result = await MLXToolBridge.invoke(
+            call,
+            enabledIDs: enabledIDs,
+            attachmentRegistry: attachmentRegistry
+        )
+        state.completeToolCall(transcriptID: transcriptID, result: result)
+        continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
+        return result
+    }
+
+    @discardableResult
+    private static func publishToolCall(
+        _ call: ToolCall,
+        status: LLMToolCallStatus,
+        state: StreamState,
+        continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
+    ) -> String {
         let transcriptID = call.id ?? UUID().uuidString
         let displayName = MLXToolBridge.displayName(for: call.function.name)
-        let arguments = MLXToolBridge.encodeArguments(call.function.arguments)
         state.upsertToolCall(
             LLMToolCallEvent(
                 transcriptID: transcriptID,
                 toolName: displayName,
                 toolDescription: displayName,
-                arguments: arguments,
-                status: .executing
+                arguments: MLXToolBridge.encodeArguments(call.function.arguments),
+                status: status
             )
         )
         continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
-        state.needsEmitterReset = true
+        return transcriptID
+    }
 
-        do {
-            let result = try await MLXToolBridge.invoke(call, tools: tools)
-            state.completeToolCall(transcriptID: transcriptID, result: result)
-            continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
-            return result
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            state.failToolCall(transcriptID: transcriptID, error: error.localizedDescription)
-            continuation.yield(.toolCallsUpdated(calls: state.toolCalls))
-            throw error
-        }
+    private static func flushToolCallUI() async {
+        await Task.yield()
+        await MainActor.run {}
+        try? await Task.sleep(for: .milliseconds(32))
     }
 
     private struct ResolvedReasoning {
@@ -299,15 +323,30 @@ nonisolated enum MLXTokenStream {
     private static func isPrimedInside(
         thinkingEnabled: Bool,
         config: ReasoningConfig,
-        knownProtocol: Bool
+        knownProtocol: Bool,
+        modelID: String
     ) -> Bool {
         guard thinkingEnabled, knownProtocol else { return false }
+        // Gemma 4 emits `<|channel>thought` itself and, after a tool result,
+        // continues with the user-facing answer. Priming would leak the opener
+        // into the thought block and swallow that answer as thinking. Qwen-style
+        // templates still prefill `<think>` after tools, so they stay primed.
+        if HuggingFaceModelCatalog.looksLikeGemma4(id: modelID) {
+            return false
+        }
         switch config.promptStrategy {
         case .alwaysOn, .templateFlag:
             return true
         case .none:
             return false
         }
+    }
+
+    /// Some Gemma 4 tokenizers decode the channel-open token as `<|channel|>`
+    /// instead of `<|channel>`, so the start delimiter never matches.
+    private static func normalizeReasoningChunk(_ chunk: String, modelID: String) -> String {
+        guard HuggingFaceModelCatalog.looksLikeGemma4(id: modelID) else { return chunk }
+        return chunk.replacingOccurrences(of: "<|channel|>", with: "<|channel>")
     }
 
     private static func thinkingComponents(
@@ -349,6 +388,92 @@ nonisolated enum MLXTokenStream {
         from entry: LLMHistoryEntry,
         modelID: String
     ) -> [MLXLMCommon.Chat.Message] {
+        if !entry.transcriptBlocks.isEmpty {
+            return interleavedAssistantHistoryMessages(from: entry, modelID: modelID)
+        }
+        return legacyAssistantHistoryMessages(from: entry, modelID: modelID)
+    }
+
+    private static func interleavedAssistantHistoryMessages(
+        from entry: LLMHistoryEntry,
+        modelID: String
+    ) -> [MLXLMCommon.Chat.Message] {
+        var messages: [MLXLMCommon.Chat.Message] = []
+        var pendingReasoning = ""
+        var pendingText = ""
+        var pendingTools: [LLMHistoryToolCall] = []
+        var toolsByID: [String: LLMHistoryToolCall] = [:]
+        for call in entry.toolCalls {
+            toolsByID[call.transcriptID] = call
+        }
+
+        func flushText() {
+            let content = assistantHistoryContent(
+                answer: pendingText,
+                reasoning: pendingReasoning,
+                modelID: modelID
+            )
+            pendingReasoning = ""
+            pendingText = ""
+            if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                messages.append(.assistant(content))
+            }
+        }
+
+        func flushTools() {
+            guard !pendingTools.isEmpty else { return }
+            flushText()
+            let mlxCalls = pendingTools.map { historyCall in
+                ToolCall(
+                    function: ToolCall.Function(
+                        name: MLXToolBridge.schemaName(for: historyCall.toolName),
+                        arguments: MLXToolBridge.decodeArguments(historyCall.argumentsJSON)
+                    ),
+                    id: historyCall.transcriptID
+                )
+            }
+            messages.append(.assistant("", toolCalls: mlxCalls))
+            for historyCall in pendingTools {
+                messages.append(
+                    .tool(
+                        historyCall.result ?? historyCall.error ?? "",
+                        id: historyCall.transcriptID,
+                        name: MLXToolBridge.schemaName(for: historyCall.toolName)
+                    )
+                )
+            }
+            pendingTools = []
+        }
+
+        for block in entry.transcriptBlocks {
+            switch block {
+            case .reasoning(let content):
+                flushTools()
+                if !pendingReasoning.isEmpty {
+                    pendingReasoning += "\n\n"
+                }
+                pendingReasoning += content
+            case .text(let content):
+                flushTools()
+                if !pendingText.isEmpty {
+                    pendingText += "\n\n"
+                }
+                pendingText += content
+            case .tool(let transcriptID):
+                if let tool = toolsByID[transcriptID] {
+                    pendingTools.append(tool)
+                }
+            }
+        }
+        flushTools()
+        flushText()
+        return messages
+    }
+
+    private static func legacyAssistantHistoryMessages(
+        from entry: LLMHistoryEntry,
+        modelID: String
+    ) -> [MLXLMCommon.Chat.Message] {
         var messages: [MLXLMCommon.Chat.Message] = []
         if !entry.toolCalls.isEmpty {
             let mlxCalls = entry.toolCalls.map { historyCall in
@@ -372,22 +497,25 @@ nonisolated enum MLXTokenStream {
             }
         }
 
-        let content = assistantHistoryContent(from: entry, modelID: modelID)
+        let content = assistantHistoryContent(
+            answer: entry.content,
+            reasoning: entry.reasoningContent ?? "",
+            modelID: modelID
+        )
         if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             messages.append(.assistant(content))
         }
         return messages
     }
 
-    private static func assistantHistoryContent(from entry: LLMHistoryEntry, modelID: String) -> String {
-        let answer = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func assistantHistoryContent(answer: String, reasoning: String, modelID: String) -> String {
+        let answer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         // Gemma 4 must not see prior thoughts in history, including Qwen-style
         // `<think>` wrappers that its template does not understand.
         if HuggingFaceModelCatalog.looksLikeGemma4(id: modelID) {
             return answer
         }
-        let reasoning = entry.reasoningContent?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let reasoning = reasoning.trimmingCharacters(in: .whitespacesAndNewlines)
         if reasoning.isEmpty {
             return answer
         }
@@ -398,7 +526,6 @@ nonisolated enum MLXTokenStream {
     }
 }
 
-@available(iOS 27, *)
 nonisolated private final class StreamState: @unchecked Sendable {
     private let lock = NSLock()
     var emitter: ReasoningEventEmitter

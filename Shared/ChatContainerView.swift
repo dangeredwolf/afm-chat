@@ -11,57 +11,15 @@ struct ChatContainerView: View {
     @StateObject private var chatManager = ChatManager()
     @State private var selectedChatId: UUID?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
-    @State private var showingModelUnavailableAlert = false
-    
-    private var availability: LLMAvailability { LLMProviderManager.shared.client.availability }
-    
+
     var body: some View {
-        Group {
-            switch availability {
-            case .available:
-                NavigationSplitView(columnVisibility: $columnVisibility) {
-                    ChatListView(
-                        chatManager: chatManager,
-                        selectedChatId: $selectedChatId
-                    )
-                } detail: {
-                    detailContent
-                }
-            case .unavailable(.deviceNotEligible):
-                NavigationStack {
-                    ModelUnavailableView(
-                        title: "Device Not Compatible",
-                        message: "Your device doesn't support Apple Intelligence features. Apple Intelligence requires an A17 Pro, A18, or M1 chip or better.",
-                        icon: "exclamationmark.triangle"
-                    )
-                }
-            case .unavailable(.notEnabled):
-                NavigationStack {
-                    ModelUnavailableView(
-                        title: "Apple Intelligence Required",
-                        message: "You need to enable Apple Intelligence in Settings. It might take a few minutes for your device to download the language model.",
-                        icon: "brain.head.profile",
-                        showSettingsButton: true
-                    )
-                }
-            case .unavailable(.modelNotReady):
-                NavigationStack {
-                    ModelUnavailableView(
-                        title: "Model Downloading",
-                        message: "The Apple Intelligence language model is currently downloading in the background. Check its status in Settings.",
-                        icon: "arrow.down.circle",
-                        showSettingsButton: true
-                    )
-                }
-            case .unavailable(let other):
-                NavigationStack {
-                    ModelUnavailableView(
-                        title: "Model Unavailable",
-                        message: "The Apple Intelligence language model is currently unavailable. Please try again later.\n\nError: \(other)",
-                        icon: "exclamationmark.circle"
-                    )
-                }
-            }
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            ChatListView(
+                chatManager: chatManager,
+                selectedChatId: $selectedChatId
+            )
+        } detail: {
+            detailContent
         }
     }
     
@@ -200,9 +158,7 @@ struct ChatListView: View {
                 ModelPickerView(chatManager: chatManager, scope: .defaults, navigationTitle: "Settings")
             }
             .sheet(isPresented: $showingModelPicker) {
-                if #available(iOS 27, *) {
-                    ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
-                }
+                ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
             }
             .onChange(of: selectedChatId) { _, newId in
                 handleSelectionChange(newId)
@@ -277,9 +233,7 @@ struct ChatListView: View {
             ModelPickerView(chatManager: chatManager, scope: .defaults, navigationTitle: "Settings")
         }
         .sheet(isPresented: $showingModelPicker) {
-            if #available(iOS 27, *) {
-                ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
-            }
+            ModelPickerView(chatManager: chatManager, scope: .currentChat, navigationTitle: "Models")
         }
         .onChange(of: isSearchPresented) { _, presented in
             if presented {
@@ -295,7 +249,7 @@ struct ChatListView: View {
     private var chatList: some View {
         List(selection: $selectedChatId) {
             #if AFM_MLX
-            if #available(iOS 27, *), downloads.hasActiveDownloads {
+            if downloads.hasActiveDownloads {
                 Section {
                     ModelDownloadBanner {
                         showingModelPicker = true
@@ -513,8 +467,7 @@ struct ChatDetailView: View {
 
     private var showsComposerModelPicker: Bool {
         guard !showsModelNameInNavigationBar else { return false }
-        if #available(iOS 27, *) { return true }
-        return false
+        return true
     }
 
     var body: some View {

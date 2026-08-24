@@ -22,25 +22,30 @@ struct WebFetchTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> [String] {
-        var trackedArguments: [String: String] = ["url": arguments.url]
-        if let offset = arguments.offset {
+        await Self.run(url: arguments.url, offset: arguments.offset, maxCharacters: arguments.maxCharacters)
+    }
+
+    static func run(url: String, offset: Int?, maxCharacters: Int?) async -> [String] {
+        let name = definition.displayName
+        var trackedArguments: [String: String] = ["url": url]
+        if let offset {
             trackedArguments["offset"] = String(offset)
         }
-        if let maxCharacters = arguments.maxCharacters {
+        if let maxCharacters {
             trackedArguments["maxCharacters"] = String(maxCharacters)
         }
         ToolExecutionTracker.begin(toolName: name, arguments: trackedArguments)
         defer { ToolExecutionTracker.end(toolName: name, arguments: trackedArguments) }
 
-        let offset = arguments.offset ?? 0
-        let maxCharacters = arguments.maxCharacters ?? ChatAttachmentReader.defaultMaxCharacters
+        let resolvedOffset = offset ?? 0
+        let resolvedMaxCharacters = maxCharacters ?? ChatAttachmentReader.defaultMaxCharacters
 
         do {
-            let page = try await WebPageExtractor.extract(from: arguments.url)
+            let page = try await WebPageExtractor.extract(from: url)
             let paginated = ChatAttachmentReader.paginateText(
                 page.textContent,
-                offset: offset,
-                maxCharacters: maxCharacters
+                offset: resolvedOffset,
+                maxCharacters: resolvedMaxCharacters
             )
             return [formatOutput(page: page, result: paginated)]
         } catch let error as WebPageExtractionError {
@@ -62,7 +67,7 @@ struct WebFetchTool: Tool {
         }
     }
 
-    private func formatOutput(page: ExtractedPage, result: ChatAttachmentReader.ReadResult) -> String {
+    private static func formatOutput(page: ExtractedPage, result: ChatAttachmentReader.ReadResult) -> String {
         var output = "URL: \(page.url.absoluteString)\n"
         if !page.title.isEmpty {
             output += "Title: \(page.title)\n"

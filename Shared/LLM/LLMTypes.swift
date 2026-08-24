@@ -259,20 +259,29 @@ public struct LLMHistoryEntry: Sendable {
     public let attachments: [LLMAttachment]
     public let toolCalls: [LLMHistoryToolCall]
     public let reasoningContent: String?
+    public let transcriptBlocks: [LLMTranscriptBlock]
 
     public init(
         isUser: Bool,
         content: String,
         attachments: [LLMAttachment] = [],
         toolCalls: [LLMHistoryToolCall] = [],
-        reasoningContent: String? = nil
+        reasoningContent: String? = nil,
+        transcriptBlocks: [LLMTranscriptBlock] = []
     ) {
         self.isUser = isUser
         self.content = content
         self.attachments = attachments
         self.toolCalls = toolCalls
         self.reasoningContent = reasoningContent
+        self.transcriptBlocks = transcriptBlocks
     }
+}
+
+public enum LLMTranscriptBlock: Sendable, Equatable {
+    case reasoning(content: String)
+    case tool(transcriptID: String)
+    case text(content: String)
 }
 
 public enum LLMGuardrailsMode: String, Codable, Sendable {
@@ -389,7 +398,7 @@ public enum LLMStreamEvent: Sendable {
     case generationStarted
     case contentUpdated(fullText: String)
     case toolCallsUpdated(calls: [LLMToolCallEvent])
-    case reasoningUpdated(content: String?, tokenCount: Int?)
+    case reasoningUpdated(content: String?, tokenCount: Int?, entryCount: Int?)
 }
 
 public enum LLMAvailability: Equatable {

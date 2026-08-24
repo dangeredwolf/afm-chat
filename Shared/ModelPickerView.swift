@@ -53,44 +53,42 @@ struct ModelPickerView: View {
                     Text("Apple Intelligence")
                 }
 
-                if #available(iOS 27, *) {
-                    if !downloads.items.isEmpty {
-                        Section {
-                            ForEach(downloads.items) { item in
-                                downloadRow(item)
-                            }
-                        } header: {
-                            Text("Downloading")
-                        }
-                    }
-
+                if !downloads.items.isEmpty {
                     Section {
-                        if downloadedStore.models.isEmpty, downloads.items.isEmpty {
-                            Text("Download an open-source MLX model to run it locally.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(downloadedStore.models) { model in
-                                let option = cachedOptions.first {
-                                    $0.choice.mlxModelID == model.id
-                                }
-                                downloadedRow(model: model, option: option)
-                            }
+                        ForEach(downloads.items) { item in
+                            downloadRow(item)
                         }
                     } header: {
-                        Text("Downloaded")
+                        Text("Downloading")
                     }
+                }
 
-                    #if AFM_MLX
-                    Section {
-                        Button {
-                            showingAddModel = true
-                        } label: {
-                            Label("Add Model", systemImage: "plus.circle")
+                Section {
+                    if downloadedStore.models.isEmpty, downloads.items.isEmpty {
+                        Text("Download an open-source MLX model to run it locally.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(downloadedStore.models) { model in
+                            let option = cachedOptions.first {
+                                $0.choice.mlxModelID == model.id
+                            }
+                            downloadedRow(model: model, option: option)
                         }
                     }
-                    #endif
+                } header: {
+                    Text("Downloaded")
                 }
+
+                #if AFM_MLX
+                Section {
+                    Button {
+                        showingAddModel = true
+                    } label: {
+                        Label("Add Model", systemImage: "plus.circle")
+                    }
+                }
+                #endif
             }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
@@ -101,9 +99,7 @@ struct ModelPickerView: View {
             }
             #if AFM_MLX
             .sheet(isPresented: $showingAddModel) {
-                if #available(iOS 27, *) {
-                    AddModelView()
-                }
+                AddModelView()
             }
             #endif
             .confirmationDialog(
@@ -287,7 +283,7 @@ struct ModelPickerView: View {
             await downloadedStore.remove(model.id)
             chatManager.resetChats(usingDeletedModel: model.id)
             if draft.model.mlxModelID == model.id {
-                draft.applySelectedModel(.onDevice)
+                draft.applySelectedModel(AFMModelCatalog.resolvedDefaultModel())
             }
             modelPendingDelete = nil
         }

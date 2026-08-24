@@ -16,13 +16,17 @@ struct JavaScriptTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> [String] {
-        ToolExecutionTracker.begin(toolName: name, arguments: ["code": arguments.code])
-        defer { ToolExecutionTracker.end(toolName: name, arguments: ["code": arguments.code]) }
-
-        return execute(arguments.code)
+        Self.run(code: arguments.code)
     }
 
-    private func execute(_ code: String) -> [String] {
+    static func run(code: String) -> [String] {
+        let name = definition.displayName
+        ToolExecutionTracker.begin(toolName: name, arguments: ["code": code])
+        defer { ToolExecutionTracker.end(toolName: name, arguments: ["code": code]) }
+        return execute(code)
+    }
+
+    private static func execute(_ code: String) -> [String] {
         let context = JSContext()!
 
         var consoleOutput: [String] = []

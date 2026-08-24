@@ -41,39 +41,80 @@ enum AFMTranscriptBuilder {
     }
 
     private static func assistantEntries(for message: LLMHistoryEntry) -> [Transcript.Entry] {
+        if !message.transcriptBlocks.isEmpty {
+            return interleavedAssistantEntries(for: message)
+        }
+        return legacyAssistantEntries(for: message)
+    }
+
+    private static func interleavedAssistantEntries(for message: LLMHistoryEntry) -> [Transcript.Entry] {
         var entries: [Transcript.Entry] = []
-
-        let hydratedToolCalls = message.toolCalls.filter { $0.result != nil || $0.error != nil }
-        if !hydratedToolCalls.isEmpty {
-            let calls = hydratedToolCalls.map { toolCall in
-                Transcript.ToolCall(
-                    id: toolCall.transcriptID,
-                    toolName: toolCall.toolName,
-                    arguments: generatedContent(toolName: toolCall.toolName, argumentsJSON: toolCall.argumentsJSON)
-                )
-            }
-            entries.append(.toolCalls(Transcript.ToolCalls(calls)))
-
-            for toolCall in hydratedToolCalls {
-                let outputText = toolCall.result ?? toolCall.error ?? ""
-                let segment = Transcript.Segment.text(Transcript.TextSegment(content: outputText))
-                let output = Transcript.ToolOutput(
-                    id: toolCall.transcriptID,
-                    toolName: toolCall.toolName,
-                    segments: [segment]
-                )
-                entries.append(.toolOutput(output))
-            }
+        var pendingTools: [LLMHistoryToolCall] = []
+        var toolsByID: [String: LLMHistoryToolCall] = [:]
+        for call in message.toolCalls {
+            toolsByID[call.transcriptID] = call
         }
 
-        let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            let textSegment = Transcript.Segment.text(Transcript.TextSegment(content: message.content))
-            let response = Transcript.Response(assetIDs: [], segments: [textSegment])
-            entries.append(.response(response))
+        func flushTools() {
+            appendToolEntries(pendingTools, to: &entries)
+            pendingTools.removeAll()
         }
 
+        for block in message.transcriptBlocks {
+            switch block {
+            case .reasoning:
+                continue
+            case .tool(let transcriptID):
+                if let tool = toolsByID[transcriptID] {
+                    pendingTools.append(tool)
+                }
+            case .text(let content):
+                flushTools()
+                appendResponse(content, to: &entries)
+            }
+        }
+        flushTools()
         return entries
+    }
+
+    private static func legacyAssistantEntries(for message: LLMHistoryEntry) -> [Transcript.Entry] {
+        var entries: [Transcript.Entry] = []
+        appendToolEntries(message.toolCalls, to: &entries)
+        appendResponse(message.content, to: &entries)
+        return entries
+    }
+
+    private static func appendToolEntries(_ toolCalls: [LLMHistoryToolCall], to entries: inout [Transcript.Entry]) {
+        let hydratedToolCalls = toolCalls.filter { $0.result != nil || $0.error != nil }
+        guard !hydratedToolCalls.isEmpty else { return }
+
+        let calls = hydratedToolCalls.map { toolCall in
+            Transcript.ToolCall(
+                id: toolCall.transcriptID,
+                toolName: toolCall.toolName,
+                arguments: generatedContent(toolName: toolCall.toolName, argumentsJSON: toolCall.argumentsJSON)
+            )
+        }
+        entries.append(.toolCalls(Transcript.ToolCalls(calls)))
+
+        for toolCall in hydratedToolCalls {
+            let outputText = toolCall.result ?? toolCall.error ?? ""
+            let segment = Transcript.Segment.text(Transcript.TextSegment(content: outputText))
+            let output = Transcript.ToolOutput(
+                id: toolCall.transcriptID,
+                toolName: toolCall.toolName,
+                segments: [segment]
+            )
+            entries.append(.toolOutput(output))
+        }
+    }
+
+    private static func appendResponse(_ content: String, to entries: inout [Transcript.Entry]) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let textSegment = Transcript.Segment.text(Transcript.TextSegment(content: content))
+        let response = Transcript.Response(assetIDs: [], segments: [textSegment])
+        entries.append(.response(response))
     }
 
     private static func generatedContent(toolName: String, argumentsJSON: String) -> GeneratedContent {

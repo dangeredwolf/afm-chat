@@ -19,10 +19,6 @@ private struct DisclosureHeader: View, Equatable {
 
     var body: some View {
         HStack(spacing: 4) {
-            Text(title)
-                .font(.subheadline)
-                .foregroundStyle(isFailed ? Color.red.opacity(0.85) : Color.secondary)
-
             if isInProgress {
                 ProgressView()
                     .tint(isFailed ? Color.red.opacity(0.85) : Color.secondary)
@@ -30,6 +26,10 @@ private struct DisclosureHeader: View, Equatable {
                     .frame(width: 12, height: 12)
                     .accessibilityHidden(true)
             }
+
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(isFailed ? Color.red.opacity(0.85) : Color.secondary)
 
             if let qualifier, !qualifier.isEmpty {
                 Text(qualifier)
@@ -469,8 +469,6 @@ struct ChatBubble: View {
                     }
                 }
             }
-        } else {
-            assistantBubbleContent
         }
     }
 
@@ -506,33 +504,21 @@ struct ChatBubble: View {
     }
 
     @ViewBuilder
-    private var assistantBubbleContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if hasImageAttachments {
-                MessageImageAttachmentsView(
-                    attachments: imageAttachments,
-                    alignment: .leading,
-                    maxWidth: maxBubbleWidth - 24
-                )
+    private func assistantMarkdown(_ text: String) -> some View {
+        Markdown(text)
+            .markdownTextStyle(\.text) {
+                ForegroundColor(.primary)
             }
-
-            if hasTextContent {
-                Markdown(message.content)
-                    .markdownTextStyle(\.text) {
-                        ForegroundColor(.primary)
-                    }
-                    .markdownTextStyle(\.link) {
-                        ForegroundColor(.primary)
-                        UnderlineStyle(.single)
-                    }
-                    .markdownTextStyle(\.code) {
-                        FontFamilyVariant(.monospaced)
-                        FontSize(.em(0.85))
-                        ForegroundColor(.primary)
-                        BackgroundColor(.primary.opacity(0.1))
-                    }
+            .markdownTextStyle(\.link) {
+                ForegroundColor(.primary)
+                UnderlineStyle(.single)
             }
-        }
+            .markdownTextStyle(\.code) {
+                FontFamilyVariant(.monospaced)
+                FontSize(.em(0.85))
+                ForegroundColor(.primary)
+                BackgroundColor(.primary.opacity(0.1))
+            }
     }
 
     @ViewBuilder
@@ -548,6 +534,160 @@ struct ChatBubble: View {
         }
     }
 
+    private var firstTextBlockID: UUID? {
+        message.displayBlocks.compactMap { block -> UUID? in
+            guard case .text(let id, _) = block else { return nil }
+            return id
+        }.first
+    }
+
+    private var hasVisibleToolBlocks: Bool {
+        message.displayBlocks.contains { block in
+            guard case .tool(let id) = block else { return false }
+            return message.toolCalls.contains { $0.id == id }
+        }
+    }
+
+    private var isToolRunning: Bool {
+        if message.hasActiveToolCalls { return true }
+        if case .runningTool = generationPhase { return true }
+        return false
+    }
+
+    @ViewBuilder
+    private var assistantTranscript: some View {
+        let blocks = message.displayBlocks
+        let lastIndex = blocks.indices.last
+
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+                switch block {
+                case .reasoning(_, let content, let duration):
+                    ReasoningView(
+                        reasoningContent: content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : content,
+                        reasoningDuration: duration,
+                        isThinkingActive: isStreaming
+                            && index == lastIndex
+                            && !isToolRunning,
+                        maxWidth: maxBubbleWidth
+                    )
+                    .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+                case .tool(let id):
+                    if let toolCall = message.toolCalls.first(where: { $0.id == id }) {
+                        ToolCallView(toolCall: toolCall, maxWidth: maxBubbleWidth)
+                            .id(toolCall.id)
+                    }
+                case .text(let id, let content):
+                    VStack(alignment: .leading, spacing: 6) {
+                        if id == firstTextBlockID, hasFileAttachments {
+                            MessageFileAttachmentsView(
+                                attachments: fileAttachments,
+                                alignment: .leading,
+                                maxWidth: maxBubbleWidth
+                            )
+                        }
+                        styledBubble {
+                            assistantTextBubbleContent(
+                                text: content,
+                                includeImages: id == firstTextBlockID
+                            )
+                        }
+                    }
+                }
+            }
+
+            if firstTextBlockID == nil {
+                if hasFileAttachments {
+                    MessageFileAttachmentsView(
+                        attachments: fileAttachments,
+                        alignment: .leading,
+                        maxWidth: maxBubbleWidth
+                    )
+                }
+                if message.isError {
+                    styledBubble {
+                        bubbleContent
+                    }
+                } else if hasImageAttachments {
+                    styledBubble {
+                        MessageImageAttachmentsView(
+                            attachments: imageAttachments,
+                            alignment: .leading,
+                            maxWidth: maxBubbleWidth - 24
+                        )
+                    }
+                } else if isStreaming && blocks.isEmpty {
+                    StreamingStatusBubble(phase: generationPhase)
+                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+                } else if isStreaming, case .runningTool = generationPhase, !hasVisibleToolBlocks {
+                    StreamingStatusBubble(phase: generationPhase)
+                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+                }
+            } else if message.isError {
+                styledBubble {
+                    bubbleContent
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func assistantTextBubbleContent(text: String, includeImages: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if includeImages, hasImageAttachments {
+                MessageImageAttachmentsView(
+                    attachments: imageAttachments,
+                    alignment: .leading,
+                    maxWidth: maxBubbleWidth - 24
+                )
+            }
+
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                assistantMarkdown(text)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func styledBubble<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(bubblePadding)
+            .background(bubbleBackground)
+            .foregroundColor(
+                message.isUser && !isImageOnlyUserMessage ? .white :
+                message.isError ? .primary :
+                .primary
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .compositingGroup()
+            .shadow(
+                color: isImageOnlyUserMessage ? Color.black.opacity(0.12) : .clear,
+                radius: 4,
+                y: 2
+            )
+            .frame(maxWidth: maxBubbleWidth, alignment: message.isUser ? .trailing : .leading)
+            .contextMenu {
+                Button(action: {
+                    onCopy?(message.id)
+                }) {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                if message.isUser {
+                    Button(action: {
+                        onEdit?(message.id)
+                    }) {
+                        Label("Edit Message", systemImage: "pencil")
+                    }
+                } else if message.isError {
+                    Button(action: {
+                        onRetry?(message.id)
+                    }) {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                    }
+                }
+            }
+    }
+
     var body: some View {
         HStack {
             if message.isUser {
@@ -555,76 +695,22 @@ struct ChatBubble: View {
             }
 
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 6) {
-                if !message.isUser {
-                    if message.hasReasoningContent {
-                        ReasoningView(
-                            reasoningContent: message.reasoningContent,
-                            reasoningDuration: message.reasoningDuration,
-                            isThinkingActive: isStreaming
-                                && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                if message.isUser {
+                    if hasFileAttachments {
+                        MessageFileAttachmentsView(
+                            attachments: fileAttachments,
+                            alignment: .trailing,
                             maxWidth: maxBubbleWidth
                         )
-                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
                     }
 
-                    if message.hasToolCalls {
-                        LazyVStack(alignment: .leading, spacing: 4) {
-                            ForEach(message.toolCalls) { toolCall in
-                                ToolCallView(toolCall: toolCall, maxWidth: maxBubbleWidth)
-                                    .id(toolCall.id)
-                            }
+                    if hasBubbleContent {
+                        styledBubble {
+                            bubbleContent
                         }
                     }
-                }
-
-                if hasFileAttachments {
-                    MessageFileAttachmentsView(
-                        attachments: fileAttachments,
-                        alignment: message.isUser ? .trailing : .leading,
-                        maxWidth: maxBubbleWidth
-                    )
-                }
-
-                if hasBubbleContent {
-                    bubbleContent
-                        .padding(bubblePadding)
-                        .background(bubbleBackground)
-                        .foregroundColor(
-                            message.isUser && !isImageOnlyUserMessage ? .white :
-                            message.isError ? .primary :
-                            .primary
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .compositingGroup()
-                        .shadow(
-                            color: isImageOnlyUserMessage ? Color.black.opacity(0.12) : .clear,
-                            radius: 4,
-                            y: 2
-                        )
-                        .frame(maxWidth: maxBubbleWidth, alignment: message.isUser ? .trailing : .leading)
-                        .contextMenu {
-                            Button(action: {
-                                onCopy?(message.id)
-                            }) {
-                                Label("Copy", systemImage: "doc.on.doc")
-                            }
-                            if message.isUser {
-                                Button(action: {
-                                    onEdit?(message.id)
-                                }) {
-                                    Label("Edit Message", systemImage: "pencil")
-                                }
-                            } else if message.isError {
-                                Button(action: {
-                                    onRetry?(message.id)
-                                }) {
-                                    Label("Retry", systemImage: "arrow.clockwise")
-                                }
-                            }
-                        }
-                } else if isStreaming && !message.isUser && !message.hasReasoningContent && !message.hasToolCalls {
-                    StreamingStatusBubble(phase: generationPhase)
-                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+                } else {
+                    assistantTranscript
                 }
             }
 
@@ -664,6 +750,8 @@ private struct StreamingStatusBubble: View {
             return "Preparing \(name)…"
         case .compiling(let name), .generating(let name):
             return "Preparing \(name)…"
+        case .runningTool(let name):
+            return toolCallTitle(name: name, status: .executing)
         case .idle:
             return "Waiting…"
         }

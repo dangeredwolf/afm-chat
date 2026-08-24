@@ -5,11 +5,11 @@ nonisolated enum ChatGenerationPhase: Equatable, Sendable {
     case loadingModel(name: String, fraction: Double?)
     case compiling(name: String)
     case generating(name: String)
+    case runningTool(name: String)
 }
 
 #if AFM_MLX
 
-@available(iOS 27, *)
 @MainActor
 final class MLXRuntime {
     static let shared = MLXRuntime()

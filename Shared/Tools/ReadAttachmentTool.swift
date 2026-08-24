@@ -58,35 +58,50 @@ struct ReadAttachmentTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> [String] {
-        var trackedArguments: [String: String] = ["filename": arguments.filename]
-        if let offset = arguments.offset {
+        await Self.run(
+            filename: arguments.filename,
+            offset: arguments.offset,
+            maxCharacters: arguments.maxCharacters,
+            registry: registry
+        )
+    }
+
+    static func run(
+        filename: String,
+        offset: Int?,
+        maxCharacters: Int?,
+        registry: AttachmentRegistry
+    ) async -> [String] {
+        let name = definition.displayName
+        var trackedArguments: [String: String] = ["filename": filename]
+        if let offset {
             trackedArguments["offset"] = String(offset)
         }
-        if let maxCharacters = arguments.maxCharacters {
+        if let maxCharacters {
             trackedArguments["maxCharacters"] = String(maxCharacters)
         }
         ToolExecutionTracker.begin(toolName: name, arguments: trackedArguments)
         defer { ToolExecutionTracker.end(toolName: name, arguments: trackedArguments) }
 
-        let trimmedName = arguments.filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = filename.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            return ["Error: filename is required. Available files: \(formatAvailableLabels())"]
+            return ["Error: filename is required. Available files: \(formatAvailableLabels(registry))"]
         }
 
         guard let attachment = registry.resolve(label: trimmedName) else {
-            return ["Error: No attachment named \"\(trimmedName)\". Available files: \(formatAvailableLabels())"]
+            return ["Error: No attachment named \"\(trimmedName)\". Available files: \(formatAvailableLabels(registry))"]
         }
 
-        let offset = arguments.offset ?? 0
-        let maxCharacters = arguments.maxCharacters ?? ChatAttachmentReader.defaultMaxCharacters
+        let resolvedOffset = offset ?? 0
+        let resolvedMaxCharacters = maxCharacters ?? ChatAttachmentReader.defaultMaxCharacters
 
         if ChatAttachmentTranscriber.isTranscribable(attachment) {
             switch await ChatAttachmentTranscriber.transcribe(attachment: attachment) {
             case .success(let transcript):
                 let result = ChatAttachmentReader.paginateText(
                     transcript,
-                    offset: offset,
-                    maxCharacters: maxCharacters
+                    offset: resolvedOffset,
+                    maxCharacters: resolvedMaxCharacters
                 )
                 return [ChatAttachmentReader.formatOutput(result, label: attachment.label)]
             case .failure(let error):
@@ -94,7 +109,7 @@ struct ReadAttachmentTool: Tool {
             }
         }
 
-        switch ChatAttachmentReader.read(attachment: attachment, offset: offset, maxCharacters: maxCharacters) {
+        switch ChatAttachmentReader.read(attachment: attachment, offset: resolvedOffset, maxCharacters: resolvedMaxCharacters) {
         case .success(let result):
             return [ChatAttachmentReader.formatOutput(result, label: attachment.label)]
         case .failure(let error):
@@ -102,7 +117,7 @@ struct ReadAttachmentTool: Tool {
         }
     }
 
-    private func formatAvailableLabels() -> String {
+    private static func formatAvailableLabels(_ registry: AttachmentRegistry) -> String {
         let labels = registry.availableLabels
         return labels.isEmpty ? "(none)" : labels.joined(separator: ", ")
     }

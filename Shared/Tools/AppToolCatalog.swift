@@ -276,10 +276,17 @@ struct AppToolDefinition: Sendable {
     }
 
     func asLLMTool(attachmentRegistry: AttachmentRegistry? = nil) -> AnyLLMTool {
-        AnyLLMTool(
+        var payloads: [String: Any] = [
+            "toolID": id.rawValue,
+            "afmTool": makeFoundationTool(attachmentRegistry: attachmentRegistry)
+        ]
+        if let attachmentRegistry {
+            payloads["attachmentRegistry"] = attachmentRegistry
+        }
+        return AnyLLMTool(
             name: displayName,
             description: description,
-            providerPayloads: ["afmTool": makeFoundationTool(attachmentRegistry: attachmentRegistry)]
+            providerPayloads: payloads
         )
     }
 
