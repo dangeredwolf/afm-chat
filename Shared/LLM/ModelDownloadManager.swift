@@ -93,6 +93,59 @@ enum DownloadByteFormat {
     }
 }
 
+enum ModelMemoryFit {
+    static let warningRatio = 0.9
+
+    static var deviceMemoryBytes: UInt64 {
+        ProcessInfo.processInfo.physicalMemory
+    }
+
+    static func shouldWarn(modelBytes: Int64?) -> Bool {
+        guard let modelBytes, modelBytes > 0 else { return false }
+        let ram = deviceMemoryBytes
+        guard ram > 0 else { return false }
+        return Double(modelBytes) > Double(ram) * warningRatio
+    }
+
+    static func warningMessage(modelBytes: Int64) -> String {
+        let model = DownloadByteFormat.bytes(modelBytes)
+        let ram = DownloadByteFormat.bytes(Int64(clamping: deviceMemoryBytes))
+        return "This model is about \(model), which is more than 80% of this device's \(ram) of memory. It may run slowly or fail to load."
+    }
+}
+
+enum ModelStorageFit {
+    static var availableBytes: Int64 {
+        let url = URL(fileURLWithPath: NSHomeDirectory())
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeAvailableCapacityKey,
+        ]) else {
+            return 0
+        }
+        if let important = values.volumeAvailableCapacityForImportantUsage, important > 0 {
+            return important
+        }
+        if let capacity = values.volumeAvailableCapacity, capacity > 0 {
+            return Int64(capacity)
+        }
+        return 0
+    }
+
+    static func shouldWarn(modelBytes: Int64?) -> Bool {
+        guard let modelBytes, modelBytes > 0 else { return false }
+        let available = availableBytes
+        guard available > 0 else { return false }
+        return modelBytes > available
+    }
+
+    static func warningMessage(modelBytes: Int64) -> String {
+        let model = DownloadByteFormat.bytes(modelBytes)
+        let available = DownloadByteFormat.bytes(availableBytes)
+        return "This model is about \(model), which is larger than this device's \(available) of available storage. The download may fail."
+    }
+}
+
 @MainActor
 final class ModelDownloadManager: ObservableObject {
     static let shared = ModelDownloadManager()
@@ -142,7 +195,7 @@ final class ModelDownloadManager: ObservableObject {
                 tags: model.tags,
                 status: .queued,
                 completedBytes: 0,
-                totalBytes: 0,
+                totalBytes: max(0, model.sizeBytes ?? 0),
                 throughputBytesPerSec: nil,
                 currentFileName: nil
             )

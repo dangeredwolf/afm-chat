@@ -117,9 +117,7 @@ struct ModelPickerView: View {
             chatManager.selectModel(option.choice)
         } label: {
             HStack(alignment: .top, spacing: 12) {
-                if let lab = ModelLab.infer(from: option.displayName, option.choice.mlxModelID ?? "") {
-                    ModelLabIcon(lab: lab)
-                }
+                leadingIcon(for: option.choice, displayName: option.displayName)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(option.displayName)
                         .foregroundStyle(.primary)
@@ -224,6 +222,18 @@ struct ModelPickerView: View {
                 modelPendingDelete = model
             } label: {
                 Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func leadingIcon(for choice: LLMModelChoice, displayName: String) -> some View {
+        switch choice {
+        case .onDevice, .privateCloudCompute:
+            AppleIntelligenceIcon()
+        case .mlx(let id):
+            if let lab = ModelLab.infer(from: displayName, id) {
+                ModelLabIcon(lab: lab)
             }
         }
     }

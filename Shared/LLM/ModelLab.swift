@@ -77,3 +77,28 @@ struct ModelLabIcon: View {
             .accessibilityHidden(true)
     }
 }
+
+struct AppleIntelligenceIcon: View {
+    var size: CGFloat = 28
+
+    var body: some View {
+        Image(systemName: "apple.intelligence")
+            .resizable()
+            .scaledToFit()
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(Self.bloom)
+            .padding(1)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+
+    private static let bloom = LinearGradient(
+        colors: [
+            Color(red: 0.490, green: 0.757, blue: 0.973),
+            Color(red: 0.690, green: 0.549, blue: 1.000),
+            Color(red: 0.957, green: 0.494, blue: 0.769)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+}

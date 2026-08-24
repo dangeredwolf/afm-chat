@@ -44,7 +44,9 @@ enum MLXModelFactory {
             pipelineTag: pipelineTag,
             tags: tags
         )
-        let useVLM = media.vision
+        // Gemma 4's VLM `gemma4PrepareTextOnly` crashes in Metal Gather/setBytes
+        // during text prefill. Load the text backbone through LLMModelFactory.
+        let useVLM = media.vision && !HuggingFaceModelCatalog.looksLikeGemma4(id: id)
 
         var capabilities: [LanguageModelCapabilities.Capability] = [
             .toolCalling,
@@ -121,13 +123,6 @@ enum MLXModelFactory {
 
         let model = await makeLanguageModel(id: id, pipelineTag: pipelineTag, tags: tags)
         try await model.preload()
-
-        // Gemma 4 VLMs trip a Metal `setBytes` nil-pointer crash on a text-only
-        // compile pass. Skip that generate; the library uses a text-only prepare
-        // path for subsequent chat turns.
-        if looksLikeGemma4(id: id) {
-            return
-        }
 
         onPhase(.compiling(name: name))
         let container = try await model.loadContainer()
@@ -430,12 +425,15 @@ enum MLXModelFactory {
             configuration.reasoningConfig = known.reasoningConfig
             configuration.messageGenerator = known.messageGenerator
         }
-        if looksLikeGemma4(id: id) {
+        if HuggingFaceModelCatalog.looksLikeGemma4(id: id) {
             if configuration.extraEOSTokens.isEmpty {
                 configuration.extraEOSTokens = ["<turn|>"]
             }
             if configuration.toolCallFormat == nil {
                 configuration.toolCallFormat = .gemma4
+            }
+            if configuration.reasoningConfig == nil {
+                configuration.reasoningConfig = Gemma4Chat.reasoningConfig
             }
         }
         return configuration
@@ -454,11 +452,6 @@ enum MLXModelFactory {
         return nil
     }
 
-    private static func looksLikeGemma4(id: String) -> Bool {
-        let lowered = id.lowercased()
-        return lowered.contains("gemma-4") || lowered.contains("/gemma4")
-    }
-
     private static func hubWeightsLocation(id: String) -> URL {
         if let directory = HuggingFaceCache.weightsDirectory(for: id) {
             return directory
@@ -471,6 +464,19 @@ enum MLXModelFactory {
     }
     #endif
 }
+
+#if AFM_MLX
+/// Gemma 4 thinking is a chat-template flag plus channel delimiters, not `<think>` tags.
+enum Gemma4Chat {
+    static let reasoningConfig = ReasoningConfig(
+        startDelimiter: "<|channel>thought",
+        endDelimiter: "<channel|>",
+        promptStrategy: .templateFlag(key: "enable_thinking", defaultOn: false),
+        isSpecialToken: true,
+        implicitEndDelimiters: ["<|tool_call>"]
+    )
+}
+#endif
 
 #if AFM_MLX
 private nonisolated enum LoadProgressBridge {

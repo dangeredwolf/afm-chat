@@ -136,6 +136,12 @@ enum HuggingFaceModelCatalog {
         pipelineTag: String? = nil,
         tags: [String] = []
     ) -> LLMMediaCapabilities {
+        // Gemma 4 VLMs crash in Metal on the text-only prepare path, so this
+        // app loads them as text models. Don't advertise native media.
+        if looksLikeGemma4(id: id) {
+            return .none
+        }
+
         let modelType = HuggingFaceCache.modelType(for: id)?.lowercased()
         let visionFromTag = isVision(pipelineTag: pipelineTag, tags: tags)
         let visionFromType = modelType.map { vlmModelTypes.contains($0) } ?? false
@@ -151,7 +157,20 @@ enum HuggingFaceModelCatalog {
         )
     }
 
+    /// Hugging Face ids and `model_type` values for the Gemma 4 family.
+    nonisolated static func looksLikeGemma4(id: String) -> Bool {
+        if let modelType = HuggingFaceCache.modelType(for: id)?.lowercased(),
+           modelType.hasPrefix("gemma4") {
+            return true
+        }
+        let lowered = id.lowercased()
+        return lowered.contains("gemma-4") || lowered.contains("gemma4")
+    }
+
     nonisolated static func looksLikeReasoning(id: String, tags: [String] = []) -> Bool {
+        if looksLikeGemma4(id: id) {
+            return true
+        }
         let haystack = ([id] + tags).joined(separator: " ").lowercased()
         let markers = ["thinking", "reason", "r1", "qwq", "deepseek-r", "qwen3"]
         return markers.contains(where: { haystack.contains($0) })

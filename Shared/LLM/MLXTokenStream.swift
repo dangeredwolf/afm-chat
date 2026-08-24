@@ -74,7 +74,7 @@ nonisolated enum MLXTokenStream {
         let chatSession = ChatSession(
             container,
             instructions: instructions,
-            history: mlxHistory(from: history),
+            history: mlxHistory(from: history, modelID: modelID),
             generateParameters: GenerateParameters(temperature: Float(temperature)),
             components: components,
             additionalContext: additionalContext
@@ -205,6 +205,9 @@ nonisolated enum MLXTokenStream {
         ) {
             return resolved
         }
+        if HuggingFaceModelCatalog.looksLikeGemma4(id: id) {
+            return Gemma4Chat.reasoningConfig
+        }
         if HuggingFaceModelCatalog.looksLikeAlwaysOnReasoning(id: id) {
             return .alwaysOnThinking
         }
@@ -275,7 +278,10 @@ nonisolated enum MLXTokenStream {
         }
     }
 
-    private static func mlxHistory(from history: [LLMHistoryEntry]) -> [MLXLMCommon.Chat.Message] {
+    private static func mlxHistory(
+        from history: [LLMHistoryEntry],
+        modelID: String
+    ) -> [MLXLMCommon.Chat.Message] {
         history.compactMap { entry in
             let images = entry.attachments.filter { $0.mediaKind == .image }.map { UserInput.Image.url($0.fileURL) }
             let videos = entry.attachments.filter { $0.mediaKind == .video }.map { UserInput.Video.url($0.fileURL) }
@@ -283,7 +289,7 @@ nonisolated enum MLXTokenStream {
             if entry.isUser {
                 return .user(entry.content, images: images, videos: videos, audios: audios)
             }
-            let content = assistantHistoryContent(from: entry)
+            let content = assistantHistoryContent(from: entry, modelID: modelID)
             guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return nil
             }
@@ -291,8 +297,13 @@ nonisolated enum MLXTokenStream {
         }
     }
 
-    private static func assistantHistoryContent(from entry: LLMHistoryEntry) -> String {
+    private static func assistantHistoryContent(from entry: LLMHistoryEntry, modelID: String) -> String {
         let answer = entry.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Gemma 4 must not see prior thoughts in history, including Qwen-style
+        // `<think>` wrappers that its template does not understand.
+        if HuggingFaceModelCatalog.looksLikeGemma4(id: modelID) {
+            return answer
+        }
         let reasoning = entry.reasoningContent?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if reasoning.isEmpty {

@@ -263,4 +263,14 @@ private struct PendingAttachmentChip: View {
             mediaSymbol("doc.fill")
         }
     }
+
+    private func mediaSymbol(_ symbol: String) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.secondary.opacity(0.15))
+            Image(systemName: symbol)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 }
