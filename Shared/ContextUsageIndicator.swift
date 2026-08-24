@@ -5,15 +5,19 @@ struct ContextUsageIndicator: View {
     let contextWindowSizes: [LLMModelChoice: Int]
     @State private var showingDetails = false
 
+    private let hitSize: CGFloat = 48
+
     var body: some View {
         Button {
             showingDetails = true
         } label: {
             ContextUsageRing(fraction: usage.fillFraction)
-                .accessibilityLabel("Context usage")
-                .accessibilityValue(accessibilityValue)
+                .frame(width: hitSize, height: hitSize)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Context usage")
+        .accessibilityValue(accessibilityValue)
         .popover(isPresented: $showingDetails, arrowEdge: .top) {
             ContextUsageDetailsView(
                 usage: usage,

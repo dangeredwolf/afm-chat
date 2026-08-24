@@ -104,7 +104,7 @@ enum AFMModelCatalog {
         }
     }
 
-    static func systemLanguageModel(guardrails: LLMGuardrailsMode = .default) -> SystemLanguageModel {
+    static func systemLanguageModel(guardrails: LLMGuardrailsMode = .permissiveContentTransformations) -> SystemLanguageModel {
         switch guardrails {
         case .default:
             return SystemLanguageModel.default

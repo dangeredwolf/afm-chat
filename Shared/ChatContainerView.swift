@@ -143,11 +143,12 @@ struct ChatListView: View {
     @State private var searchText = ""
     @State private var isSearchPresented = false
 
-    private var displayedSections: [(title: String, chats: [Chat])] {
+    private var displayedSections: [ChatListSection] {
+        let sortedChats = chatsSortedByActivity(chatManager.chats)
         if isActivelySearching || !searchText.isEmpty {
-            return searchResultSections(from: chatManager.chats, query: searchText)
+            return searchResultSections(from: sortedChats, query: searchText)
         }
-        return groupedChats(chatManager.chats)
+        return groupedChats(sortedChats)
     }
 
     private var isActivelySearching: Bool {
@@ -281,7 +282,7 @@ struct ChatListView: View {
 
     private var chatList: some View {
         List(selection: $selectedChatId) {
-            ForEach(displayedSections, id: \.title) { section in
+            ForEach(displayedSections) { section in
                 Section {
                     ForEach(section.chats) { chat in
                         ChatRowView(chat: chat, searchQuery: searchText)
@@ -486,15 +487,17 @@ struct ChatDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    if chatManager.showsContextUsageIndicator,
-                       let usage = chatManager.contextUsage {
+                if chatManager.showsContextUsageIndicator,
+                   let usage = chatManager.contextUsage {
+                    ToolbarItem(placement: .topBarTrailing) {
                         ContextUsageIndicator(
                             usage: usage,
                             contextWindowSizes: chatManager.contextWindowSizes
                         )
                     }
+                }
 
+                ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { showingSettings = true }) {
                         Image(systemName: "gear")
                     }
@@ -514,9 +517,11 @@ struct ChatDetailView: View {
                                 model: chatManager.currentModel,
                                 reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
+                                appendDateToSystemPrompt: chatManager.currentAppendDateToSystemPrompt,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
                                 )
                             )
                         }
@@ -530,9 +535,11 @@ struct ChatDetailView: View {
                                 model: chatManager.currentModel,
                                 reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
+                                appendDateToSystemPrompt: chatManager.currentAppendDateToSystemPrompt,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
                                 )
                             )
                         }
@@ -546,9 +553,11 @@ struct ChatDetailView: View {
                                 model: newModel,
                                 reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
+                                appendDateToSystemPrompt: chatManager.currentAppendDateToSystemPrompt,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
                                 )
                             )
                         }
@@ -562,9 +571,11 @@ struct ChatDetailView: View {
                                 model: chatManager.currentModel,
                                 reasoningLevel: newReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
+                                appendDateToSystemPrompt: chatManager.currentAppendDateToSystemPrompt,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
                                 )
                             )
                         }
@@ -578,9 +589,11 @@ struct ChatDetailView: View {
                                 model: chatManager.currentModel,
                                 reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: newToolsEnabled,
+                                appendDateToSystemPrompt: chatManager.currentAppendDateToSystemPrompt,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
                                 )
                             )
                         }
@@ -594,9 +607,11 @@ struct ChatDetailView: View {
                                 model: chatManager.currentModel,
                                 reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
+                                appendDateToSystemPrompt: chatManager.currentAppendDateToSystemPrompt,
                                 perTools: (
                                     code: newValue,
-                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
                                 )
                             )
                         }
@@ -610,9 +625,47 @@ struct ChatDetailView: View {
                                 model: chatManager.currentModel,
                                 reasoningLevel: chatManager.currentReasoningLevel,
                                 toolsEnabled: chatManager.currentToolsEnabled,
+                                appendDateToSystemPrompt: chatManager.currentAppendDateToSystemPrompt,
                                 perTools: (
                                     code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
-                                    webSearch: newValue
+                                    webSearch: newValue,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
+                                )
+                            )
+                        }
+                    ),
+                    toolWebFetchEnabled: Binding(
+                        get: { chatManager.currentChat?.toolWebFetchEnabled ?? true },
+                        set: { newValue in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                appendDateToSystemPrompt: chatManager.currentAppendDateToSystemPrompt,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
+                                    webFetch: newValue
+                                )
+                            )
+                        }
+                    ),
+                    appendDateToSystemPrompt: Binding(
+                        get: { chatManager.currentAppendDateToSystemPrompt },
+                        set: { newValue in
+                            chatManager.updateChatSettings(
+                                systemPrompt: chatManager.currentSystemPrompt,
+                                temperature: chatManager.currentTemperature,
+                                model: chatManager.currentModel,
+                                reasoningLevel: chatManager.currentReasoningLevel,
+                                toolsEnabled: chatManager.currentToolsEnabled,
+                                appendDateToSystemPrompt: newValue,
+                                perTools: (
+                                    code: chatManager.currentChat?.toolCodeInterpreterEnabled ?? true,
+                                    webSearch: chatManager.currentChat?.toolWebSearchEnabled ?? true,
+                                    webFetch: chatManager.currentChat?.toolWebFetchEnabled ?? true
                                 )
                             )
                         }
@@ -663,6 +716,8 @@ struct GlobalSettingsView: View {
     @State private var defaultToolsEnabled: Bool = true
     @State private var defaultToolCodeInterpreterEnabled: Bool = true
     @State private var defaultToolWebSearchEnabled: Bool = true
+    @State private var defaultToolWebFetchEnabled: Bool = true
+    @State private var defaultAppendDateToSystemPrompt: Bool = true
     
     var body: some View {
         NavigationView {
@@ -680,6 +735,12 @@ struct GlobalSettingsView: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                         )
+
+                    Toggle("Append today's date", isOn: $defaultAppendDateToSystemPrompt)
+
+                    Text("When enabled, adds the current date to the end of the system prompt sent to the model.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Picker("Model", selection: $defaultModel) {
@@ -746,6 +807,13 @@ struct GlobalSettingsView: View {
                             }
                         }
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        Toggle(isOn: $defaultToolWebFetchEnabled) {
+                            HStack {
+                                Image(systemName: "doc.text").foregroundColor(.green)
+                                Text("Web Fetch")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                     }
                 }
             }
@@ -767,6 +835,8 @@ struct GlobalSettingsView: View {
                         UserDefaults.standard.set(defaultToolsEnabled, forKey: "toolsEnabled")
                         UserDefaults.standard.set(defaultToolCodeInterpreterEnabled, forKey: "toolCodeInterpreterEnabled")
                         UserDefaults.standard.set(defaultToolWebSearchEnabled, forKey: "toolWebSearchEnabled")
+                        UserDefaults.standard.set(defaultToolWebFetchEnabled, forKey: "toolWebFetchEnabled")
+                        UserDefaults.standard.set(defaultAppendDateToSystemPrompt, forKey: "appendDateToSystemPrompt")
                         dismiss()
                     }
                 }
@@ -784,6 +854,8 @@ struct GlobalSettingsView: View {
             defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
             defaultToolCodeInterpreterEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
             defaultToolWebSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
+            defaultToolWebFetchEnabled = UserDefaults.standard.object(forKey: "toolWebFetchEnabled") as? Bool ?? true
+            defaultAppendDateToSystemPrompt = UserDefaults.standard.object(forKey: "appendDateToSystemPrompt") as? Bool ?? true
         }
     }
 }

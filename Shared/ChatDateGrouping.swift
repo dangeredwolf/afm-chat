@@ -58,7 +58,22 @@ enum ChatDateGroup: Hashable, Comparable {
     }
 }
 
-func groupedChats(_ chats: [Chat]) -> [(title: String, chats: [Chat])] {
+enum ChatListSectionID: Hashable {
+    case dateGroup(ChatDateGroup)
+    case searchResults
+}
+
+struct ChatListSection: Identifiable {
+    let id: ChatListSectionID
+    let title: String
+    let chats: [Chat]
+}
+
+func chatsSortedByActivity(_ chats: [Chat]) -> [Chat] {
+    chats.sorted { $0.lastActivityDate > $1.lastActivityDate }
+}
+
+func groupedChats(_ chats: [Chat]) -> [ChatListSection] {
     let calendar = Calendar.current
     let now = Date()
     let startOfToday = calendar.startOfDay(for: now)
@@ -93,6 +108,6 @@ func groupedChats(_ chats: [Chat]) -> [(title: String, chats: [Chat])] {
         .sorted { $0.key < $1.key }
         .map { group, chats in
             let sortedChats = chats.sorted { $0.lastActivityDate > $1.lastActivityDate }
-            return (title: group.title, chats: sortedChats)
+            return ChatListSection(id: .dateGroup(group), title: group.title, chats: sortedChats)
         }
 }

@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct CameraImagePicker: UIViewControllerRepresentable {
     let onImagePicked: (UIImage) -> Void
@@ -48,3 +49,70 @@ struct CameraImagePicker: UIViewControllerRepresentable {
         }
     }
 }
+
+#if targetEnvironment(macCatalyst)
+enum MacFilePicker {
+    private static var activeCoordinator: DocumentPickerCoordinator?
+
+    @MainActor
+    static func pickFiles(completion: @escaping (Result<[URL], Error>) -> Void) {
+        guard let presenter = topViewController() else {
+            completion(.failure(CocoaError(.fileNoSuchFile)))
+            return
+        }
+
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+        picker.allowsMultipleSelection = true
+
+        let coordinator = DocumentPickerCoordinator { result in
+            activeCoordinator = nil
+            completion(result)
+        }
+        activeCoordinator = coordinator
+        picker.delegate = coordinator
+        presenter.present(picker, animated: true)
+    }
+
+    @MainActor
+    private static func topViewController() -> UIViewController? {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
+            return nil
+        }
+
+        let root = scene.windows.first(where: \.isKeyWindow)?.rootViewController
+            ?? scene.windows.first?.rootViewController
+        guard let root else { return nil }
+        return topViewController(from: root)
+    }
+
+    @MainActor
+    private static func topViewController(from controller: UIViewController) -> UIViewController {
+        if let presented = controller.presentedViewController {
+            return topViewController(from: presented)
+        }
+        if let navigation = controller as? UINavigationController,
+           let visible = navigation.visibleViewController {
+            return topViewController(from: visible)
+        }
+        return controller
+    }
+}
+
+private final class DocumentPickerCoordinator: NSObject, UIDocumentPickerDelegate {
+    let onComplete: (Result<[URL], Error>) -> Void
+
+    init(onComplete: @escaping (Result<[URL], Error>) -> Void) {
+        self.onComplete = onComplete
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        controller.dismiss(animated: true)
+        onComplete(.success(urls))
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        controller.dismiss(animated: true)
+        onComplete(.failure(CocoaError(.userCancelled)))
+    }
+}
+#endif

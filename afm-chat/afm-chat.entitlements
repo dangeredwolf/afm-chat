@@ -4,5 +4,7 @@
 <dict>
 	<key>com.apple.developer.private-cloud-compute</key>
 	<true/>
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
 </dict>
 </plist>

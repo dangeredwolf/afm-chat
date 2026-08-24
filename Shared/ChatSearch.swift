@@ -16,14 +16,16 @@ func chatsMatching(_ chats: [Chat], query: String) -> [Chat] {
     }
 }
 
-func searchResultSections(from chats: [Chat], query: String) -> [(title: String, chats: [Chat])] {
+func searchResultSections(from chats: [Chat], query: String) -> [ChatListSection] {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
         return groupedChats(chats)
     }
     let matches = chatsMatching(chats, query: trimmed)
         .sorted { $0.lastActivityDate > $1.lastActivityDate }
-    return matches.isEmpty ? [] : [("All Results", matches)]
+    return matches.isEmpty
+        ? []
+        : [ChatListSection(id: .searchResults, title: "All Results", chats: matches)]
 }
 
 extension Chat {

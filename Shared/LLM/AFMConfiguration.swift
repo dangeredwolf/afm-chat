@@ -10,9 +10,7 @@ private struct ChatSessionInstructions: DynamicInstructions {
         Instructions {
             prompt
         }
-        ForEach(tools, id: \.name) { tool in
-            AnyTool(tool)
-        }
+        tools
     }
 }
 
@@ -92,6 +90,14 @@ enum AFMTranscriptBuilder {
             if let code = extractPropertyValue(named: "code", from: argumentsJSON) {
                 return GeneratedContent(properties: ["code": code])
             }
+        case "Read Attachment":
+            if let filename = extractPropertyValue(named: "filename", from: argumentsJSON) {
+                return GeneratedContent(properties: ["filename": filename])
+            }
+        case "Web Fetch":
+            if let url = extractPropertyValue(named: "url", from: argumentsJSON) {
+                return GeneratedContent(properties: ["url": url])
+            }
         default:
             break
         }
@@ -162,15 +168,17 @@ enum AFMSessionFactory {
             guardrails: configuration.guardrails
         )
 
-        var profile = LanguageModelSession.Profile {
+        let profile = LanguageModelSession.Profile {
             ChatSessionInstructions(prompt: instructions, tools: tools)
         }
         .model(model)
         .temperature(configuration.temperature)
-
-        if AFMModelCatalog.supportsReasoning(configuration.model) {
-            profile = profile.reasoningLevel(configuration.reasoningLevel.toAFM())
-        }
+        .reasoningLevel(
+            AFMModelCatalog.supportsReasoning(configuration.model)
+                ? configuration.reasoningLevel.toAFM()
+                : nil
+        )
+        .transcriptErrorHandlingPolicy(.preserveTranscript)
 
         return LanguageModelSession(profile: profile, history: history)
     }
@@ -209,7 +217,7 @@ enum AFMPromptBuilder {
         let unsupported = llmPrompt.attachments.filter { !$0.isImage }.map(\.label)
         let fileNote = unsupported.isEmpty
             ? nil
-            : "Attached files (not sent as images): " + unsupported.joined(separator: ", ")
+            : "The user attached these files: " + unsupported.joined(separator: ", ") + ". Use the Read Attachment tool to read or transcribe their contents before answering questions about them."
 
         if imageParts.isEmpty {
             if let fileNote {
@@ -257,7 +265,7 @@ enum AFMPromptBuilder {
         }
 
         if !unsupportedFileLabels.isEmpty {
-            let note = "Attached files (not sent as images): " + unsupportedFileLabels.joined(separator: ", ")
+            let note = "The user attached these files: " + unsupportedFileLabels.joined(separator: ", ") + ". Use the Read Attachment tool to read or transcribe their contents before answering questions about them."
             segments.append(.text(Transcript.TextSegment(content: note)))
         }
 

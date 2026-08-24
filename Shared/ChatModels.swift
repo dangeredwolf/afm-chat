@@ -148,6 +148,51 @@ struct ToolCallInfo: Identifiable, Codable {
         self.timestamp = Date()
     }
 
+    init(
+        id: UUID,
+        toolName: String,
+        toolDescription: String,
+        arguments: String,
+        status: ToolCallStatus,
+        result: String?,
+        error: String?,
+        transcriptID: String,
+        timestamp: Date
+    ) {
+        self.id = id
+        self.transcriptID = transcriptID
+        self.toolName = toolName
+        self.toolDescription = toolDescription
+        self.arguments = arguments
+        self.status = status
+        self.result = result
+        self.error = error
+        self.timestamp = timestamp
+    }
+
+    func updated(from call: LLMToolCallEvent, toolDescription: String) -> ToolCallInfo {
+        let status: ToolCallStatus
+        switch call.status {
+        case .pending: status = .pending
+        case .executing: status = .executing
+        case .completed: status = .completed
+        case .failed: status = .failed
+        }
+
+        let resolvedArguments = call.arguments.isEmpty ? arguments : call.arguments
+        return ToolCallInfo(
+            id: id,
+            toolName: call.toolName,
+            toolDescription: toolDescription,
+            arguments: resolvedArguments,
+            status: status,
+            result: call.result,
+            error: call.error,
+            transcriptID: call.transcriptID,
+            timestamp: timestamp
+        )
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, transcriptID, toolName, toolDescription, arguments, status, result, error, timestamp
     }
@@ -245,6 +290,7 @@ struct ChatMessage: Identifiable {
     var toolCalls: [ToolCallInfo]
     var reasoningContent: String?
     var reasoningDuration: TimeInterval?
+    var reasoningTokenCount: Int?
     var attachments: [ChatMessageAttachment]
 
     init(
@@ -254,6 +300,7 @@ struct ChatMessage: Identifiable {
         toolCalls: [ToolCallInfo] = [],
         reasoningContent: String? = nil,
         reasoningDuration: TimeInterval? = nil,
+        reasoningTokenCount: Int? = nil,
         attachments: [ChatMessageAttachment] = []
     ) {
         self.id = UUID()
@@ -264,6 +311,7 @@ struct ChatMessage: Identifiable {
         self.toolCalls = toolCalls
         self.reasoningContent = reasoningContent
         self.reasoningDuration = reasoningDuration
+        self.reasoningTokenCount = reasoningTokenCount
         self.attachments = attachments
     }
 
@@ -277,6 +325,7 @@ struct ChatMessage: Identifiable {
         toolCalls: [ToolCallInfo],
         reasoningContent: String?,
         reasoningDuration: TimeInterval?,
+        reasoningTokenCount: Int?,
         attachments: [ChatMessageAttachment]
     ) {
         self.id = id
@@ -287,6 +336,7 @@ struct ChatMessage: Identifiable {
         self.toolCalls = toolCalls
         self.reasoningContent = reasoningContent
         self.reasoningDuration = reasoningDuration
+        self.reasoningTokenCount = reasoningTokenCount
         self.attachments = attachments
     }
 
@@ -313,6 +363,27 @@ struct ChatMessage: Identifiable {
         guard let reasoningContent else { return false }
         return !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    func updatedForStreaming(
+        content: String,
+        toolCalls: [ToolCallInfo],
+        reasoningContent: String?,
+        reasoningDuration: TimeInterval?,
+        reasoningTokenCount: Int?
+    ) -> ChatMessage {
+        ChatMessage(
+            id: id,
+            content: content,
+            isUser: isUser,
+            timestamp: timestamp,
+            error: error,
+            toolCalls: toolCalls,
+            reasoningContent: reasoningContent,
+            reasoningDuration: reasoningDuration,
+            reasoningTokenCount: reasoningTokenCount,
+            attachments: attachments
+        )
+    }
 }
 
 // When adding tool calls, etc it broke loading old chats, so this lets us carefully load properties to make everything work
@@ -335,6 +406,7 @@ extension ChatMessage: Codable {
         let toolCalls = try container.decodeIfPresent([ToolCallInfo].self, forKey: .toolCalls) ?? []
         let reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
         let reasoningDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .reasoningDuration)
+        let reasoningTokenCount = try container.decodeIfPresent(Int.self, forKey: .reasoningTokenCount)
         let attachments = try container.decodeIfPresent([ChatMessageAttachment].self, forKey: .attachments) ?? []
         
         self.init(
@@ -346,6 +418,7 @@ extension ChatMessage: Codable {
             toolCalls: toolCalls,
             reasoningContent: reasoningContent,
             reasoningDuration: reasoningDuration,
+            reasoningTokenCount: reasoningTokenCount,
             attachments: attachments
         )
     }
@@ -360,6 +433,7 @@ extension ChatMessage: Codable {
         try container.encode(toolCalls, forKey: .toolCalls)
         try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
         try container.encodeIfPresent(reasoningDuration, forKey: .reasoningDuration)
+        try container.encodeIfPresent(reasoningTokenCount, forKey: .reasoningTokenCount)
         if !attachments.isEmpty {
             try container.encode(attachments, forKey: .attachments)
         }
@@ -379,6 +453,8 @@ struct Chat: Identifiable, Codable {
     // Per-tool enablement (effective only when toolsEnabled == true)
     var toolCodeInterpreterEnabled: Bool
     var toolWebSearchEnabled: Bool
+    var toolWebFetchEnabled: Bool
+    var appendDateToSystemPrompt: Bool
     
     init(title: String = "New Chat",
          systemPrompt: String = "You are a helpful assistant.",
@@ -387,7 +463,9 @@ struct Chat: Identifiable, Codable {
          reasoningLevel: LLMReasoningLevel = .moderate,
          toolsEnabled: Bool = true,
          toolCodeInterpreterEnabled: Bool = true,
-         toolWebSearchEnabled: Bool = true) {
+         toolWebSearchEnabled: Bool = true,
+         toolWebFetchEnabled: Bool = true,
+         appendDateToSystemPrompt: Bool = true) {
         self.id = UUID()
         self.title = title
         self.messages = []
@@ -399,12 +477,15 @@ struct Chat: Identifiable, Codable {
         self.toolsEnabled = toolsEnabled
         self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
         self.toolWebSearchEnabled = toolWebSearchEnabled
+        self.toolWebFetchEnabled = toolWebFetchEnabled
+        self.appendDateToSystemPrompt = appendDateToSystemPrompt
     }
     
     // Custom Codable implementation for backward compatibility
     private enum CodingKeys: String, CodingKey {
         case id, title, messages, createdAt, systemPrompt, temperature, model, reasoningLevel, toolsEnabled,
-             toolCodeInterpreterEnabled, toolLocationEnabled, toolWebFetchEnabled, toolWebSearchEnabled
+             toolCodeInterpreterEnabled, toolLocationEnabled, toolWebFetchEnabled, toolWebSearchEnabled,
+             appendDateToSystemPrompt
     }
     
     init(from decoder: Decoder) throws {
@@ -431,8 +512,9 @@ struct Chat: Identifiable, Codable {
         self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false
         self.toolCodeInterpreterEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolCodeInterpreterEnabled) ?? true
         _ = try container.decodeIfPresent(Bool.self, forKey: .toolLocationEnabled)
-        _ = try container.decodeIfPresent(Bool.self, forKey: .toolWebFetchEnabled)
+        self.toolWebFetchEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolWebFetchEnabled) ?? true
         self.toolWebSearchEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolWebSearchEnabled) ?? true
+        self.appendDateToSystemPrompt = try container.decodeIfPresent(Bool.self, forKey: .appendDateToSystemPrompt) ?? true
     }
     
     func encode(to encoder: Encoder) throws {
@@ -447,7 +529,9 @@ struct Chat: Identifiable, Codable {
         try container.encode(reasoningLevel, forKey: .reasoningLevel)
         try container.encode(toolsEnabled, forKey: .toolsEnabled)
         try container.encode(toolCodeInterpreterEnabled, forKey: .toolCodeInterpreterEnabled)
+        try container.encode(toolWebFetchEnabled, forKey: .toolWebFetchEnabled)
         try container.encode(toolWebSearchEnabled, forKey: .toolWebSearchEnabled)
+        try container.encode(appendDateToSystemPrompt, forKey: .appendDateToSystemPrompt)
     }
     
     var lastActivityDate: Date {

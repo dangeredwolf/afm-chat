@@ -186,6 +186,9 @@ struct SearchTool: Tool {
     }
     
     func call(arguments: Arguments) async throws -> [String] {
+        ToolExecutionTracker.begin(toolName: name, arguments: ["query": arguments.query])
+        defer { ToolExecutionTracker.end(toolName: name, arguments: ["query": arguments.query]) }
+
         do {
             // Prepare the request to exa.ai search API
             guard let apiURL = URL(string: "https://exa.ai/search/api/search") else {
@@ -227,8 +230,8 @@ struct SearchTool: Tool {
                 return ["No search results found for '\(arguments.query)'. Try different keywords or phrases."]
             }
             
-            var output = "Here are the search results for \"\(arguments.query)\". Summarize the results in a way that is helpful to the user."
-            
+            // var output = "Here are the search results for \"\(arguments.query)\". Summarize the results in a way that is helpful to the user."
+            var output = ""
             for (index, result) in results.enumerated() {
                 let title = result["title"] as? String ?? "No title"
                 let url = result["url"] as? String ?? ""
@@ -255,6 +258,7 @@ struct SearchTool: Tool {
             } else {
                 output += "---\n*Found \(results.count) result(s)*"
             }
+            output += "\n*Use Web Fetch to read the full content of a specific URL.*"
             
             return [output]
             

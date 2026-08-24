@@ -18,8 +18,9 @@ struct ChatView: View {
     @State private var showCamera = false
     @State private var showFileImporter = false
     @State private var isAttachmentDropTargeted = false
+    @State private var speechInputManager: SpeechInputManager?
     
-    init(chatManager: ChatManager = ChatManager()) {
+    init(chatManager: ChatManager) {
         _chatManager = StateObject(wrappedValue: chatManager)
     }
     
@@ -134,10 +135,21 @@ struct ChatView: View {
                 isLoading: chatManager.isLoading,
                 isEditing: chatManager.editingMessageId != nil,
                 showsAttachmentButton: ChatAttachments.isSupported,
+                showsMicButton: SpeechInputSupport.isAvailable,
+                isRecording: speechInputManager?.isRecording ?? false,
+                isSpeechPreparing: speechInputManager?.isPreparing ?? false,
                 pendingAttachments: chatManager.pendingAttachments,
                 onSend: {
+                    Task {
+                        if #available(iOS 26, *), speechInputManager?.isRecording == true {
+                            await speechInputManager?.stopRecording()
+                        }
+                    }
                     chatManager.sendMessage()
                     isInputFocused = false
+                },
+                onMicTap: {
+                    handleMicTap()
                 },
                 onPickPhoto: {
                     showPhotoPicker = true
@@ -146,7 +158,17 @@ struct ChatView: View {
                     showCamera = true
                 },
                 onPickFile: {
-                    showFileImporter = true
+                    #if targetEnvironment(macCatalyst)
+                    DispatchQueue.main.async {
+                        MacFilePicker.pickFiles { result in
+                            handleImportedFiles(result)
+                        }
+                    }
+                    #else
+                    DispatchQueue.main.async {
+                        showFileImporter = true
+                    }
+                    #endif
                 },
                 onRemoveAttachment: { attachmentId in
                     chatManager.removePendingAttachment(attachmentId)
@@ -180,24 +202,64 @@ struct ChatView: View {
             )
             .ignoresSafeArea()
         }
+        #if !targetEnvironment(macCatalyst)
         .fileImporter(
             isPresented: $showFileImporter,
             allowedContentTypes: [.item],
             allowsMultipleSelection: true
         ) { result in
+            handleImportedFiles(result)
+        }
+        #endif
+        .onAppear {
+            if #available(iOS 26, *), speechInputManager == nil {
+                speechInputManager = SpeechInputManager()
+            }
+        }
+    }
+
+    private func handleMicTap() {
+        guard #available(iOS 26, *) else { return }
+        if speechInputManager == nil {
+            speechInputManager = SpeechInputManager()
+        }
+        guard let speechInputManager else { return }
+
+        speechInputManager.toggleRecording(
+            currentText: chatManager.inputText,
+            onTextUpdate: { updatedText in
+                chatManager.inputText = updatedText
+            },
+            onAutoSend: {
+                chatManager.sendMessage()
+                isInputFocused = false
+            }
+        )
+    }
+
+    private func handleImportedFiles(_ result: Result<[URL], Error>) {
+        Task { @MainActor in
             switch result {
             case .success(let urls):
-                for url in urls {
-                    let label = url.lastPathComponent
-                    let kind: ChatMessageAttachmentKind = ChatAttachments.isImageAttachment(
-                        mimeType: ChatAttachments.mimeType(for: url),
-                        fileURL: url
-                    ) ? .image : .file
-                    chatManager.addPendingAttachment(from: url, label: label, kind: kind)
-                }
+                importFiles(from: urls)
             case .failure(let error):
+                if let cocoaError = error as? CocoaError, cocoaError.code == .userCancelled {
+                    return
+                }
                 print("File import failed: \(error)")
             }
+        }
+    }
+
+    @MainActor
+    private func importFiles(from urls: [URL]) {
+        for url in urls {
+            let label = url.lastPathComponent
+            let kind: ChatMessageAttachmentKind = ChatAttachments.isImageAttachment(
+                mimeType: ChatAttachments.mimeType(for: url),
+                fileURL: url
+            ) ? .image : .file
+            chatManager.addPendingAttachment(from: url, label: label, kind: kind)
         }
     }
 

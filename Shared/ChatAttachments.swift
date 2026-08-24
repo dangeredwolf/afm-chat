@@ -63,7 +63,14 @@ enum ChatAttachments {
             try FileManager.default.removeItem(at: destination)
         }
 
-        try FileManager.default.copyItem(at: sourceURL, to: destination)
+        do {
+            try FileManager.default.copyItem(at: sourceURL, to: destination)
+        } catch {
+            // Mac Catalyst sandboxed apps sometimes reject copyItem even with security-scoped access.
+            let data = try Data(contentsOf: sourceURL)
+            try data.write(to: destination, options: .atomic)
+        }
+
         return destination
     }
 

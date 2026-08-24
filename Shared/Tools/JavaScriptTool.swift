@@ -5,7 +5,7 @@ import Foundation
 /// A tool that executes JavaScript code using JavaScriptCore
 struct _JavaScriptTool: Tool {
     let name = "Code Interpreter"
-    let description = "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc."
+    let description = "Assist the user by executing JavaScript code to perform calculations and data analysis"
     
     @Generable
     struct Arguments {
@@ -120,6 +120,9 @@ struct JavaScriptTool: Tool {
     }
     
     func call(arguments: Arguments) async throws-> [String] {
+        ToolExecutionTracker.begin(toolName: name, arguments: ["code": arguments.code])
+        defer { ToolExecutionTracker.end(toolName: name, arguments: ["code": arguments.code]) }
+
         do {
             let jsArgs = _JavaScriptTool.Arguments(code: arguments.code)
             return try await jsTool.call(arguments: jsArgs)

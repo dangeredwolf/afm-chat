@@ -50,6 +50,24 @@
 		36F1A1062E50A002000004 /* ChatAttachmentPickers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1022E50A002000002 /* ChatAttachmentPickers.swift */; };
 		36F1A1072E50A003000005 /* ChatAttachmentDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1082E50A003000006 /* ChatAttachmentDrop.swift */; };
 		36F1A1092E50A003000007 /* ChatAttachmentDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1A1082E50A003000006 /* ChatAttachmentDrop.swift */; };
+		36F2B2012E50B001000008 /* ChatAttachmentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F2B2002E50B001000008 /* ChatAttachmentReader.swift */; };
+		36F2B2032E50B002000009 /* ReadAttachmentTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F2B2022E50B002000009 /* ReadAttachmentTool.swift */; };
+		36F2B2042E50B00100000A /* ChatAttachmentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F2B2002E50B001000008 /* ChatAttachmentReader.swift */; };
+		36F2B2052E50B00200000B /* ReadAttachmentTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F2B2022E50B002000009 /* ReadAttachmentTool.swift */; };
+		36F3C3012E50C00100000C /* SpeechInputManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F3C3002E50C00100000C /* SpeechInputManager.swift */; };
+		36F3C3032E50C00200000D /* ChatAttachmentTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F3C3022E50C00200000D /* ChatAttachmentTranscriber.swift */; };
+		36F3C3042E50C00100000E /* SpeechInputManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F3C3002E50C00100000C /* SpeechInputManager.swift */; };
+		36F3C3052E50C00200000F /* ChatAttachmentTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F3C3022E50C00200000D /* ChatAttachmentTranscriber.swift */; };
+		36F4D4012E50D001000010 /* ToolExecutionTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F4D4002E50D001000012 /* ToolExecutionTracker.swift */; };
+		36F4D4032E50D001000013 /* ToolExecutionTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F4D4002E50D001000012 /* ToolExecutionTracker.swift */; };
+		36F5E5112E50E011000021 /* WebPageExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F5E5012E50E001000014 /* WebPageExtractor.swift */; };
+		36F5E5122E50E012000022 /* WebPageExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F5E5012E50E001000014 /* WebPageExtractor.swift */; };
+		36F5E5132E50E013000023 /* WebFetchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F5E5022E50E002000015 /* WebFetchTool.swift */; };
+		36F5E5142E50E014000024 /* WebFetchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F5E5022E50E002000015 /* WebFetchTool.swift */; };
+		36F5E5212E50E021000031 /* readability.js in Resources */ = {isa = PBXBuildFile; fileRef = 36F5E5032E50E003000016 /* readability.js */; };
+		36F5E5222E50E022000032 /* readability-bridge.js in Resources */ = {isa = PBXBuildFile; fileRef = 36F5E5042E50E004000017 /* readability-bridge.js */; };
+		36F5E5232E50E023000033 /* readability.js in Resources */ = {isa = PBXBuildFile; fileRef = 36F5E5032E50E003000016 /* readability.js */; };
+		36F5E5242E50E024000034 /* readability-bridge.js in Resources */ = {isa = PBXBuildFile; fileRef = 36F5E5042E50E004000017 /* readability-bridge.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -97,6 +115,15 @@
 		36F1A1012E50A001000001 /* ChatAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachments.swift; sourceTree = "<group>"; };
 		36F1A1022E50A002000002 /* ChatAttachmentPickers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentPickers.swift; sourceTree = "<group>"; };
 		36F1A1082E50A003000006 /* ChatAttachmentDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentDrop.swift; sourceTree = "<group>"; };
+		36F2B2002E50B001000008 /* ChatAttachmentReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentReader.swift; sourceTree = "<group>"; };
+		36F2B2022E50B002000009 /* ReadAttachmentTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAttachmentTool.swift; sourceTree = "<group>"; };
+		36F3C3002E50C00100000C /* SpeechInputManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechInputManager.swift; sourceTree = "<group>"; };
+		36F3C3022E50C00200000D /* ChatAttachmentTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachmentTranscriber.swift; sourceTree = "<group>"; };
+		36F4D4002E50D001000012 /* ToolExecutionTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolExecutionTracker.swift; sourceTree = "<group>"; };
+		36F5E5012E50E001000014 /* WebPageExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebPageExtractor.swift; sourceTree = "<group>"; };
+		36F5E5022E50E002000015 /* WebFetchTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFetchTool.swift; sourceTree = "<group>"; };
+		36F5E5032E50E003000016 /* readability.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = readability.js; sourceTree = "<group>"; };
+		36F5E5042E50E004000017 /* readability-bridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "readability-bridge.js"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -163,10 +190,16 @@
 				36F1A1012E50A001000001 /* ChatAttachments.swift */,
 				36F1A1022E50A002000002 /* ChatAttachmentPickers.swift */,
 				36F1A1082E50A003000006 /* ChatAttachmentDrop.swift */,
+				36F2B2002E50B001000008 /* ChatAttachmentReader.swift */,
+				36F3C3022E50C00200000D /* ChatAttachmentTranscriber.swift */,
 				36B2C3D32E45DB6F00CDC79C /* ChatDateGrouping.swift */,
 				36C4D5E62E45DB7000CDC79C /* ChatSearch.swift */,
 				3658A6202DF9E89C00254350 /* ChatView.swift */,
 				36A1B2C32E45DB6E00CDC79C /* ChatInputBar.swift */,
+				36F3C3002E50C00100000C /* SpeechInputManager.swift */,
+				36F4D4002E50D001000012 /* ToolExecutionTracker.swift */,
+				36F5E5012E50E001000014 /* WebPageExtractor.swift */,
+				36F5E5052E50E005000018 /* Resources */,
 				36984D6C2E45DB6E00CDC79C /* ContextUsageIndicator.swift */,
 				3658A6212DF9E89C00254350 /* SettingsView.swift */,
 			);
@@ -177,7 +210,9 @@
 			isa = PBXGroup;
 			children = (
 				36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */,
+				36F2B2022E50B002000009 /* ReadAttachmentTool.swift */,
 				36EC3F992E137295009B8F2F /* SearchTool.swift */,
+				36F5E5022E50E002000015 /* WebFetchTool.swift */,
 			);
 			path = Tools;
 			sourceTree = "<group>";
@@ -211,6 +246,15 @@
 				36D70A042DF9482B006889A7 /* appclip.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		36F5E5052E50E005000018 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				36F5E5032E50E003000016 /* readability.js */,
+				36F5E5042E50E004000017 /* readability-bridge.js */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -307,11 +351,15 @@
 		36A7A3FA2DF923BC00B52461 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				36F5E5212E50E021000031 /* readability.js in Resources */,
+				36F5E5222E50E022000032 /* readability-bridge.js in Resources */,
 			);
 		};
 		36D70A022DF9482B006889A7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				36F5E5232E50E023000033 /* readability.js in Resources */,
+				36F5E5242E50E024000034 /* readability-bridge.js in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */
@@ -337,6 +385,13 @@
 				36F1A1032E50A001000001 /* ChatAttachments.swift in Sources */,
 				36F1A1042E50A002000002 /* ChatAttachmentPickers.swift in Sources */,
 				36F1A1072E50A003000005 /* ChatAttachmentDrop.swift in Sources */,
+				36F2B2012E50B001000008 /* ChatAttachmentReader.swift in Sources */,
+				36F2B2032E50B002000009 /* ReadAttachmentTool.swift in Sources */,
+				36F3C3012E50C00100000C /* SpeechInputManager.swift in Sources */,
+				36F3C3032E50C00200000D /* ChatAttachmentTranscriber.swift in Sources */,
+				36F4D4012E50D001000010 /* ToolExecutionTracker.swift in Sources */,
+				36F5E5112E50E011000021 /* WebPageExtractor.swift in Sources */,
+				36F5E5132E50E013000023 /* WebFetchTool.swift in Sources */,
 				36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
 				3658A65E2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 				36984D6B2E45DB6E00CDC79C /* ContextUsageIndicator.swift in Sources */,
@@ -362,6 +417,13 @@
 				36F1A1052E50A001000003 /* ChatAttachments.swift in Sources */,
 				36F1A1062E50A002000004 /* ChatAttachmentPickers.swift in Sources */,
 				36F1A1092E50A003000007 /* ChatAttachmentDrop.swift in Sources */,
+				36F2B2042E50B00100000A /* ChatAttachmentReader.swift in Sources */,
+				36F2B2052E50B00200000B /* ReadAttachmentTool.swift in Sources */,
+				36F3C3042E50C00100000E /* SpeechInputManager.swift in Sources */,
+				36F3C3052E50C00200000F /* ChatAttachmentTranscriber.swift in Sources */,
+				36F4D4032E50D001000013 /* ToolExecutionTracker.swift in Sources */,
+				36F5E5122E50E012000022 /* WebPageExtractor.swift in Sources */,
+				36F5E5142E50E014000024 /* WebFetchTool.swift in Sources */,
 				36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
 				3658A65F2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 				36984D6D2E45DB6E00CDC79C /* ContextUsageIndicator.swift in Sources */,
@@ -524,7 +586,7 @@
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
 				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
 				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
@@ -539,6 +601,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "AFM Chat uses the camera to attach photos to your messages.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "AFM Chat uses the microphone to dictate messages with your voice.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -550,7 +613,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -590,12 +653,15 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "afm-chat/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "AFM Chat uses the camera to attach photos to your messages.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "AFM Chat uses the microphone to dictate messages with your voice.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -607,7 +673,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -640,6 +706,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = appclip/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -650,7 +717,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat.Clip;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -676,6 +743,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = appclip/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "AFM Chat";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -686,7 +754,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dangeredwolf.afmchat.Clip;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

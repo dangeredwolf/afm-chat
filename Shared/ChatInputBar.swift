@@ -19,8 +19,12 @@ struct ChatInputBar: View {
     let isLoading: Bool
     let isEditing: Bool
     let showsAttachmentButton: Bool
+    let showsMicButton: Bool
+    let isRecording: Bool
+    let isSpeechPreparing: Bool
     let pendingAttachments: [ChatMessageAttachment]
     let onSend: () -> Void
+    let onMicTap: () -> Void
     let onPickPhoto: () -> Void
     let onTakePhoto: () -> Void
     let onPickFile: () -> Void
@@ -30,6 +34,7 @@ struct ChatInputBar: View {
 
     private let sendButtonSize: CGFloat = 30
     private let minRowHeight: CGFloat = 38
+    private let minTapTarget: CGFloat = 44
 
     private var canSend: Bool {
         let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -74,6 +79,10 @@ struct ChatInputBar: View {
                                 return .ignored
                             }
 
+                        if showsMicButton {
+                            micButton
+                        }
+
                         sendSlot
                     }
                     .padding(.leading, 14)
@@ -88,6 +97,7 @@ struct ChatInputBar: View {
                         }
                     )
                     .glassEffect(.regular.interactive(), in: .capsule)
+                    .contentShape(Capsule())
                 }
             }
         }
@@ -100,6 +110,8 @@ struct ChatInputBar: View {
 
     @ViewBuilder
     private var attachmentButton: some View {
+        let tapSize = max(rowHeight, minTapTarget)
+
         Menu {
             Button {
                 onPickPhoto()
@@ -126,8 +138,32 @@ struct ChatInputBar: View {
         }
         .frame(width: rowHeight, height: rowHeight)
         .glassEffect(.regular.interactive(), in: .circle)
+        .frame(width: tapSize, height: tapSize)
+        .contentShape(Circle())
         .accessibilityLabel("Add attachment")
         .disabled(isLoading)
+        .zIndex(1)
+    }
+
+    @ViewBuilder
+    private var micButton: some View {
+        Button(action: onMicTap) {
+            ZStack {
+                if isSpeechPreparing {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                } else {
+                    Image(systemName: isRecording ? "mic.fill" : "mic")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(isRecording ? .red : .secondary)
+                        .symbolEffect(.pulse, isActive: isRecording)
+                }
+            }
+            .frame(width: 28, height: 28)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isRecording ? "Stop voice input" : "Start voice input")
+        .disabled(isLoading || isSpeechPreparing)
     }
 
     @ViewBuilder
@@ -136,16 +172,16 @@ struct ChatInputBar: View {
             if isLoading {
                 ProgressView()
                     .scaleEffect(0.7)
-            } else if canSend {
+            } else {
                 Button(action: onSend) {
                     Image(systemName: isEditing ? "checkmark" : "arrow.up")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(canSend ? .black : .secondary)
                         .frame(width: sendButtonSize, height: sendButtonSize)
-                        .background(Circle().fill(.white))
+                        .background(Circle().fill(canSend ? .white : Color.secondary.opacity(0.2)))
                 }
+                .disabled(!canSend)
                 .accessibilityLabel(isEditing ? "Confirm edit" : "Send message")
-                .transition(.scale.combined(with: .opacity))
             }
         }
         .frame(width: sendButtonSize, height: sendButtonSize)
@@ -189,6 +225,14 @@ private struct PendingAttachmentChip: View {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFill()
+        } else if ChatAttachmentTranscriber.isAudioAttachment(attachment) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.secondary.opacity(0.15))
+                Image(systemName: "waveform")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } else {
             ZStack {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)

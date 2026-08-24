@@ -15,6 +15,8 @@ struct SettingsView: View {
     @Binding var toolsEnabled: Bool
     @Binding var toolCodeInterpreterEnabled: Bool
     @Binding var toolWebSearchEnabled: Bool
+    @Binding var toolWebFetchEnabled: Bool
+    @Binding var appendDateToSystemPrompt: Bool
     let isSettingsEditable: Bool
     let hasConversationHistory: Bool
     @Environment(\.dismiss) private var dismiss
@@ -25,6 +27,8 @@ struct SettingsView: View {
     @State private var tempToolsEnabled: Bool = true
     @State private var tempToolCodeInterpreterEnabled: Bool = true
     @State private var tempToolWebSearchEnabled: Bool = true
+    @State private var tempToolWebFetchEnabled: Bool = true
+    @State private var tempAppendDateToSystemPrompt: Bool = true
     let onSave: () -> Void
 
     private let defaultPrompt = "You are a helpful assistant."
@@ -57,6 +61,14 @@ struct SettingsView: View {
                         )
                         .disabled(!isSettingsEditable)
                         .opacity(isSettingsEditable ? 1.0 : 0.6)
+
+                    Toggle("Append today's date", isOn: $tempAppendDateToSystemPrompt)
+                        .disabled(!isSettingsEditable)
+                        .opacity(isSettingsEditable ? 1.0 : 0.6)
+
+                    Text("When enabled, adds the current date to the end of the system prompt sent to the model.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
 
                     Button("Reset to Default") {
                         tempPrompt = defaultPrompt
@@ -172,6 +184,16 @@ struct SettingsView: View {
                         .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                         .disabled(!isSettingsEditable)
                         .opacity(isSettingsEditable ? 1.0 : 0.6)
+
+                        Toggle(isOn: $tempToolWebFetchEnabled) {
+                            HStack {
+                                Image(systemName: "doc.text").foregroundColor(.green)
+                                Text("Web Fetch")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+                        .disabled(!isSettingsEditable)
+                        .opacity(isSettingsEditable ? 1.0 : 0.6)
                     }
                 }
             }
@@ -193,6 +215,8 @@ struct SettingsView: View {
                         toolsEnabled = tempToolsEnabled
                         toolCodeInterpreterEnabled = tempToolCodeInterpreterEnabled
                         toolWebSearchEnabled = tempToolWebSearchEnabled
+                        toolWebFetchEnabled = tempToolWebFetchEnabled
+                        appendDateToSystemPrompt = tempAppendDateToSystemPrompt
                         onSave()
                         dismiss()
                     }
@@ -212,6 +236,8 @@ struct SettingsView: View {
             tempToolsEnabled = toolsEnabled
             tempToolCodeInterpreterEnabled = toolCodeInterpreterEnabled
             tempToolWebSearchEnabled = toolWebSearchEnabled
+            tempToolWebFetchEnabled = toolWebFetchEnabled
+            tempAppendDateToSystemPrompt = appendDateToSystemPrompt
         }
     }
 }

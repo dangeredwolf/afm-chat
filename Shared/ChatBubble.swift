@@ -7,9 +7,11 @@
 
 import SwiftUI
 import MarkdownUI
+import UIKit
 
 struct ReasoningView: View {
     let reasoningDuration: TimeInterval?
+    let reasoningTokenCount: Int?
     let isStreaming: Bool
     let isThinkingActive: Bool
     @State private var thinkingStartDate: Date?
@@ -63,9 +65,8 @@ struct ReasoningView: View {
                     reasoningHeader(durationLabel: durationLabel(at: .now))
                 }
             }
-
-            Spacer(minLength: 0)
         }
+        .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.purple.opacity(0.05))
@@ -104,6 +105,12 @@ struct ReasoningView: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
+
+            if let reasoningTokenCount, reasoningTokenCount > 0 {
+                Text("· \(reasoningTokenCount) token\(reasoningTokenCount == 1 ? "" : "s")")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 
@@ -118,144 +125,31 @@ struct ReasoningView: View {
 
 struct ToolCallView: View {
     let toolCall: ToolCallInfo
-    @State private var isExpanded: Bool = false
-    @State private var rotationAngle: Double = 0
+    let maxWidth: CGFloat
+    @State private var isExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button(action: {
+            Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                 }
-            }) {
-                HStack(spacing: 8) {
-                    Group {
-                        if toolCall.status == .executing {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 16, height: 16)
-                        } else {
-                            Image(systemName: toolCall.status.systemIcon)
-                                .foregroundColor(colorForStatus(toolCall.status))
-                                .frame(width: 16, height: 16)
-                        }
-                    }
-
-                    HStack(spacing: 4) {
-                        Text("Using")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        Text(displayNameForTool(toolCall.toolName))
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-
-                        if toolCall.status == .executing {
-                            Text("...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .opacity(0.7)
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .animation(.easeInOut(duration: 0.2), value: isExpanded)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+            } label: {
+                ToolCallHeaderView(
+                    toolName: toolCall.toolName,
+                    status: toolCall.status,
+                    isExpanded: isExpanded
+                )
+                .equatable()
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(.plain)
 
             if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    Divider()
-                        .padding(.horizontal, 12)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Description:")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                        }
-                        Text(toolCall.toolDescription)
-                            .font(.caption2)
-                            .foregroundColor(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if !toolCall.arguments.isEmpty {
-                            HStack {
-                                Text("Arguments:")
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                            }
-                            .padding(.top, 4)
-
-                            Text(formatArguments(toolCall.arguments))
-                                .font(.caption2)
-                                .foregroundColor(.primary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(4)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        if toolCall.status == .completed, let result = toolCall.result, !result.isEmpty {
-                            HStack {
-                                Text("Result:")
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                            }
-                            .padding(.top, 4)
-
-                            Text(result)
-                                .font(.caption2)
-                                .foregroundColor(.primary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.green.opacity(0.1))
-                                .cornerRadius(4)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        if toolCall.status == .failed, let error = toolCall.error {
-                            HStack {
-                                Text("Error:")
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.red)
-                                Spacer()
-                            }
-                            .padding(.top, 4)
-
-                            Text(error)
-                                .font(.caption2)
-                                .foregroundColor(.red)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(4)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                ToolCallExpandedContent(toolCall: toolCall)
             }
         }
+        .frame(maxWidth: isExpanded ? maxWidth : nil, alignment: .leading)
+        .fixedSize(horizontal: !isExpanded, vertical: false)
         .background(backgroundColorForStatus(toolCall.status))
         .cornerRadius(8)
         .overlay(
@@ -281,12 +175,156 @@ struct ToolCallView: View {
         case .failed: return .red.opacity(0.05)
         }
     }
+}
+
+private struct ToolCallHeaderView: View, Equatable {
+    let toolName: String
+    let status: ToolCallStatus
+    let isExpanded: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if status == .executing || status == .pending {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 16, height: 16)
+                } else {
+                    Image(systemName: status.systemIcon)
+                        .foregroundColor(colorForStatus(status))
+                        .frame(width: 16, height: 16)
+                }
+            }
+
+            HStack(spacing: 4) {
+                Text("Using")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Text(displayNameForTool(toolName))
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+
+                if status == .executing || status == .pending {
+                    Text("...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .opacity(0.7)
+                }
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                .animation(.easeInOut(duration: 0.2), value: isExpanded)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func colorForStatus(_ status: ToolCallStatus) -> Color {
+        switch status {
+        case .pending: return .orange
+        case .executing: return .blue
+        case .completed: return .green
+        case .failed: return .red
+        }
+    }
 
     private func displayNameForTool(_ toolName: String) -> String {
         switch toolName.lowercased() {
         case "websearch": return "Web Search"
         case "calculator": return "Calculator"
         default: return toolName.capitalized
+        }
+    }
+}
+
+private struct ToolCallExpandedContent: View {
+    let toolCall: ToolCallInfo
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+                .padding(.horizontal, 12)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Description:")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                Text(toolCall.toolDescription)
+                    .font(.caption2)
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !toolCall.arguments.isEmpty {
+                    HStack {
+                        Text("Arguments:")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.top, 4)
+
+                    Text(formatArguments(toolCall.arguments))
+                        .font(.caption2)
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if toolCall.status == .completed, let result = toolCall.result, !result.isEmpty {
+                    HStack {
+                        Text("Result:")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.top, 4)
+
+                    Text(result)
+                        .font(.caption2)
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if toolCall.status == .failed, let error = toolCall.error {
+                    HStack {
+                        Text("Error:")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.red)
+                        Spacer()
+                    }
+                    .padding(.top, 4)
+
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
         }
     }
 
@@ -298,6 +336,101 @@ struct ToolCallView: View {
             return formattedString
         }
         return arguments
+    }
+}
+
+private struct MessageFileAttachmentView: View {
+    let attachment: ChatMessageAttachment
+    var maxWidth: CGFloat?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            fileThumbnail
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            Text(attachment.label)
+                .font(.caption)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: maxWidth.map { max(0, $0 - 44) }, alignment: .leading)
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 10)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder
+    private var fileThumbnail: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.secondary.opacity(0.15))
+            Image(systemName: "doc.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct MessageImageAttachmentView: View {
+    let attachment: ChatMessageAttachment
+    let maxWidth: CGFloat
+
+    var body: some View {
+        Group {
+            if let uiImage = UIImage(contentsOfFile: attachment.fileURL.path) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: maxWidth, maxHeight: maxWidth * 1.35)
+            } else {
+                MessageFileAttachmentView(attachment: attachment, maxWidth: maxWidth)
+            }
+        }
+    }
+}
+
+private struct MessageImageAttachmentsView: View {
+    let attachments: [ChatMessageAttachment]
+    let alignment: HorizontalAlignment
+    let maxWidth: CGFloat
+
+    var body: some View {
+        VStack(alignment: alignment, spacing: 4) {
+            ForEach(attachments) { attachment in
+                MessageImageAttachmentView(attachment: attachment, maxWidth: maxWidth)
+            }
+        }
+    }
+}
+
+private struct MessageFileAttachmentsView: View {
+    let attachments: [ChatMessageAttachment]
+    let alignment: HorizontalAlignment
+    let maxWidth: CGFloat
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ForEach(attachments) { attachment in
+                HStack(spacing: 0) {
+                    if alignment == .trailing {
+                        Spacer(minLength: 0)
+                    }
+                    MessageFileAttachmentView(attachment: attachment, maxWidth: maxWidth)
+                    if alignment == .leading {
+                        Spacer(minLength: 0)
+                    }
+                }
+                .frame(maxWidth: maxWidth, alignment: alignment == .trailing ? .trailing : .leading)
+            }
+        }
     }
 }
 
@@ -326,16 +459,63 @@ struct ChatBubble: View {
         UIScreen.main.bounds.width * 0.75
     }
 
+    private var trimmedContent: String {
+        message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasTextContent: Bool {
+        !trimmedContent.isEmpty
+    }
+
+    private var imageAttachments: [ChatMessageAttachment] {
+        message.attachments.filter(\.isModelSupportedImage)
+    }
+
+    private var fileAttachments: [ChatMessageAttachment] {
+        message.attachments.filter { !$0.isModelSupportedImage }
+    }
+
+    private var hasImageAttachments: Bool {
+        !imageAttachments.isEmpty
+    }
+
+    private var hasFileAttachments: Bool {
+        !fileAttachments.isEmpty
+    }
+
     private var hasBubbleContent: Bool {
+        message.isError || hasTextContent || hasImageAttachments
+    }
+
+    private var isImageOnlyUserMessage: Bool {
         message.isUser
-            || message.isError
-            || !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && hasImageAttachments
+            && !hasTextContent
+            && !hasFileAttachments
+    }
+
+    private var isUserMessageWithImageAndText: Bool {
+        message.isUser && hasImageAttachments && hasTextContent
+    }
+
+    private var bubbleHorizontalAlignment: HorizontalAlignment {
+        message.isUser ? .trailing : .leading
+    }
+
+    private var bubblePadding: EdgeInsets {
+        if isImageOnlyUserMessage {
+            return EdgeInsets(top: 3, leading: 3, bottom: 3, trailing: 3)
+        }
+        if isUserMessageWithImageAndText {
+            return EdgeInsets()
+        }
+        return EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12)
     }
 
     @ViewBuilder
     private var bubbleContent: some View {
         if message.isUser {
-            Text(message.content)
+            userBubbleContent
         } else if message.isError, let error = message.error {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -372,23 +552,88 @@ struct ChatBubble: View {
                 }
             }
         } else {
-            Markdown(message.content)
-                .markdownTextStyle(\.text) {
-                    ForegroundColor(.primary)
+            assistantBubbleContent
+        }
+    }
+
+    @ViewBuilder
+    private var userBubbleContent: some View {
+        if isUserMessageWithImageAndText {
+            VStack(alignment: .trailing, spacing: 0) {
+                MessageImageAttachmentsView(
+                    attachments: imageAttachments,
+                    alignment: .trailing,
+                    maxWidth: maxBubbleWidth
+                )
+
+                Text(message.content)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+            }
+        } else {
+            VStack(alignment: bubbleHorizontalAlignment, spacing: 6) {
+                if hasImageAttachments {
+                    MessageImageAttachmentsView(
+                        attachments: imageAttachments,
+                        alignment: bubbleHorizontalAlignment,
+                        maxWidth: maxBubbleWidth - (isImageOnlyUserMessage ? 6 : 24)
+                    )
                 }
-                .markdownTextStyle(\.code) {
-                    FontFamilyVariant(.monospaced)
-                    FontSize(.em(0.85))
-                    ForegroundColor(.primary)
-                    BackgroundColor(.primary.opacity(0.1))
+
+                if hasTextContent {
+                    Text(message.content)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var assistantBubbleContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if hasImageAttachments {
+                MessageImageAttachmentsView(
+                    attachments: imageAttachments,
+                    alignment: .leading,
+                    maxWidth: maxBubbleWidth - 24
+                )
+            }
+
+            if hasTextContent {
+                Markdown(message.content)
+                    .markdownTextStyle(\.text) {
+                        ForegroundColor(.primary)
+                    }
+                    .markdownTextStyle(\.link) {
+                        ForegroundColor(.primary)
+                        UnderlineStyle(.single)
+                    }
+                    .markdownTextStyle(\.code) {
+                        FontFamilyVariant(.monospaced)
+                        FontSize(.em(0.85))
+                        ForegroundColor(.primary)
+                        BackgroundColor(.primary.opacity(0.1))
+                    }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var bubbleBackground: some View {
+        if isImageOnlyUserMessage {
+            Color.clear
+        } else if message.isUser {
+            Color.indigo
+        } else if message.isError {
+            Color.red.opacity(0.1)
+        } else {
+            Color.gray.opacity(0.2)
         }
     }
 
     var body: some View {
         HStack {
             if message.isUser {
-                Spacer()
+                Spacer(minLength: 0)
             }
 
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 6) {
@@ -396,6 +641,7 @@ struct ChatBubble: View {
                     if message.hasReasoningContent {
                         ReasoningView(
                             reasoningDuration: message.reasoningDuration,
+                            reasoningTokenCount: message.reasoningTokenCount,
                             isStreaming: isStreaming,
                             isThinkingActive: isStreaming
                                 && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -404,29 +650,39 @@ struct ChatBubble: View {
                     }
 
                     if message.hasToolCalls {
-                        VStack(alignment: .leading, spacing: 6) {
+                        LazyVStack(alignment: .leading, spacing: 6) {
                             ForEach(message.toolCalls) { toolCall in
-                                ToolCallView(toolCall: toolCall)
+                                ToolCallView(toolCall: toolCall, maxWidth: maxBubbleWidth)
+                                    .id(toolCall.id)
                             }
                         }
-                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
                     }
+                }
+
+                if hasFileAttachments {
+                    MessageFileAttachmentsView(
+                        attachments: fileAttachments,
+                        alignment: message.isUser ? .trailing : .leading,
+                        maxWidth: maxBubbleWidth
+                    )
                 }
 
                 if hasBubbleContent {
                     bubbleContent
-                        .padding(12)
-                        .background(
-                            message.isUser ? Color.indigo :
-                            message.isError ? Color.red.opacity(0.1) :
-                            Color.gray.opacity(0.2)
-                        )
+                        .padding(bubblePadding)
+                        .background(bubbleBackground)
                         .foregroundColor(
-                            message.isUser ? .white :
+                            message.isUser && !isImageOnlyUserMessage ? .white :
                             message.isError ? .primary :
                             .primary
                         )
-                        .cornerRadius(16)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .compositingGroup()
+                        .shadow(
+                            color: isImageOnlyUserMessage ? Color.black.opacity(0.12) : .clear,
+                            radius: 4,
+                            y: 2
+                        )
                         .frame(maxWidth: maxBubbleWidth, alignment: message.isUser ? .trailing : .leading)
                         .contextMenu {
                             Button(action: {
@@ -456,8 +712,9 @@ struct ChatBubble: View {
             }
 
             if !message.isUser {
-                Spacer()
+                Spacer(minLength: 0)
             }
         }
+        .frame(maxWidth: .infinity)
     }
 }

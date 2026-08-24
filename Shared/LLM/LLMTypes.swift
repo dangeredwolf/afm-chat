@@ -268,7 +268,7 @@ public struct LLMToolCallEvent: Codable, Identifiable {
 public enum LLMStreamEvent {
     case contentUpdated(fullText: String)
     case toolCallsUpdated(calls: [LLMToolCallEvent])
-    case reasoningUpdated(content: String?)
+    case reasoningUpdated(content: String?, tokenCount: Int?)
 }
 
 public enum LLMAvailability: Equatable {
