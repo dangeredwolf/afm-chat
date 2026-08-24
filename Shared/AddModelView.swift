@@ -7,6 +7,7 @@ struct AddModelView: View {
     @State private var sort: HuggingFaceModelSort = .trending
     @State private var searchText = ""
     @State private var models: [HuggingFaceModelSummary] = []
+    @State private var recommended: [HuggingFaceModelSummary] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var searchTask: Task<Void, Never>?
@@ -17,16 +18,16 @@ struct AddModelView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading && models.isEmpty {
+                if isLoading && models.isEmpty && (isSearching || visibleRecommended.isEmpty) {
                     ProgressView("Loading models…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let errorMessage, models.isEmpty {
+                } else if let errorMessage, models.isEmpty, isSearching || visibleRecommended.isEmpty {
                     ContentUnavailableView {
                         Label("Couldn't Load Models", systemImage: "wifi.exclamationmark")
                     } description: {
                         Text(errorMessage)
                     } actions: {
-                        Button("Retry") { Task { await loadModels() } }
+                        Button("Retry") { Task { await reloadAll() } }
                     }
                 } else {
                     modelList
@@ -78,7 +79,7 @@ struct AddModelView: View {
                 scheduleSearch()
             }
             .task {
-                await loadModels()
+                await reloadAll()
             }
             .onDisappear {
                 sizeCheckTask?.cancel()
@@ -86,19 +87,44 @@ struct AddModelView: View {
         }
     }
 
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var visibleRecommended: [HuggingFaceModelSummary] {
+        isSearching ? [] : recommended
+    }
+
+    private var hubModels: [HuggingFaceModelSummary] {
+        guard !isSearching else { return models }
+        let recommendedIDs = Set(recommended.map(\.id))
+        return models.filter { !recommendedIDs.contains($0.id) }
+    }
+
     private var modelList: some View {
         List {
-            ForEach(models) { model in
-                modelRow(model)
+            if !visibleRecommended.isEmpty {
+                Section("Recommended") {
+                    ForEach(visibleRecommended) { model in
+                        modelRow(model)
+                    }
+                }
+            }
+            if !hubModels.isEmpty {
+                Section {
+                    ForEach(hubModels) { model in
+                        modelRow(model)
+                    }
+                }
             }
         }
         .overlay {
-            if !isLoading, models.isEmpty {
+            if !isLoading, models.isEmpty, isSearching || visibleRecommended.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             }
         }
         .refreshable {
-            await loadModels()
+            await reloadAll()
         }
     }
 
@@ -132,6 +158,7 @@ struct AddModelView: View {
                         .padding(.vertical, 2)
                         .background(.secondary.opacity(0.12), in: Capsule())
                 }
+                ModelMediaBadges(capabilities: model.mediaCapabilities)
                 Label(formattedCount(model.downloads), systemImage: "arrow.down.circle")
                 Label(formattedCount(model.likes), systemImage: "heart")
                 if let sizeBytes = model.sizeBytes, sizeBytes > 0 {
@@ -226,6 +253,12 @@ struct AddModelView: View {
         }
     }
 
+    private func reloadAll() async {
+        async let hub: Void = loadModels()
+        async let rec: Void = loadRecommended()
+        _ = await (hub, rec)
+    }
+
     private func loadModels() async {
         isLoading = models.isEmpty
         errorMessage = nil
@@ -240,6 +273,10 @@ struct AddModelView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private func loadRecommended() async {
+        recommended = await RecommendedModelCatalog.loadSummaries()
     }
 
     private func formattedCount(_ value: Int) -> String {

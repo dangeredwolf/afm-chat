@@ -12,6 +12,9 @@ nonisolated enum MLXTokenStream {
         temperature: Double,
         thinkingEnabled: Bool,
         thinkingBudgetTokens: Int?,
+        saveMemory: Bool,
+        maxOutputTokens: Int?,
+        generationSeed: UInt64?,
         enabledToolIDs: [AppToolID],
         attachmentRegistry: AttachmentRegistry?
     ) -> AsyncThrowingStream<LLMStreamEvent, Error> {
@@ -26,6 +29,9 @@ nonisolated enum MLXTokenStream {
                         temperature: temperature,
                         thinkingEnabled: thinkingEnabled,
                         thinkingBudgetTokens: thinkingBudgetTokens,
+                        saveMemory: saveMemory,
+                        maxOutputTokens: maxOutputTokens,
+                        generationSeed: generationSeed,
                         enabledToolIDs: enabledToolIDs,
                         attachmentRegistry: attachmentRegistry,
                         continuation: continuation
@@ -49,6 +55,9 @@ nonisolated enum MLXTokenStream {
         temperature: Double,
         thinkingEnabled: Bool,
         thinkingBudgetTokens: Int?,
+        saveMemory: Bool,
+        maxOutputTokens: Int?,
+        generationSeed: UInt64?,
         enabledToolIDs: [AppToolID],
         attachmentRegistry: AttachmentRegistry?,
         continuation: AsyncThrowingStream<LLMStreamEvent, Error>.Continuation
@@ -90,7 +99,12 @@ nonisolated enum MLXTokenStream {
             container,
             instructions: instructions,
             history: mlxHistory(from: history, modelID: modelID),
-            generateParameters: GenerateParameters(temperature: Float(temperature)),
+            generateParameters: GenerateParameters(
+                maxTokens: maxOutputTokens,
+                kvBits: saveMemory ? 4 : nil,
+                temperature: Float(temperature),
+                seed: generationSeed
+            ),
             components: components,
             additionalContext: additionalContext,
             tools: toolSpecs.isEmpty ? nil : toolSpecs,

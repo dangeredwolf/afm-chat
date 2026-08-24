@@ -578,6 +578,9 @@ struct Chat: Identifiable, Codable {
     var reasoningLevel: LLMReasoningLevel
     var thinkingEnabled: Bool
     var thinkingBudgetTokens: Int?
+    var saveMemory: Bool
+    var maxOutputTokens: Int?
+    var generationSeed: UInt64?
     var toolsEnabled: Bool
     // Per-tool enablement (effective only when toolsEnabled == true)
     var toolCodeInterpreterEnabled: Bool
@@ -592,6 +595,9 @@ struct Chat: Identifiable, Codable {
          reasoningLevel: LLMReasoningLevel = .moderate,
          thinkingEnabled: Bool = true,
          thinkingBudgetTokens: Int? = nil,
+         saveMemory: Bool = true,
+         maxOutputTokens: Int? = nil,
+         generationSeed: UInt64? = nil,
          toolsEnabled: Bool = true,
          toolCodeInterpreterEnabled: Bool = true,
          toolWebSearchEnabled: Bool = true,
@@ -607,6 +613,9 @@ struct Chat: Identifiable, Codable {
         self.reasoningLevel = reasoningLevel
         self.thinkingEnabled = thinkingEnabled
         self.thinkingBudgetTokens = thinkingBudgetTokens
+        self.saveMemory = saveMemory
+        self.maxOutputTokens = maxOutputTokens
+        self.generationSeed = generationSeed
         self.toolsEnabled = toolsEnabled
         self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
         self.toolWebSearchEnabled = toolWebSearchEnabled
@@ -617,7 +626,7 @@ struct Chat: Identifiable, Codable {
     // Custom Codable implementation for backward compatibility
     private enum CodingKeys: String, CodingKey {
         case id, title, messages, createdAt, systemPrompt, temperature, model, reasoningLevel,
-             thinkingEnabled, thinkingBudgetTokens, toolsEnabled,
+             thinkingEnabled, thinkingBudgetTokens, saveMemory, maxOutputTokens, generationSeed, toolsEnabled,
              toolCodeInterpreterEnabled, toolLocationEnabled, toolWebFetchEnabled, toolWebSearchEnabled,
              appendDateToSystemPrompt
     }
@@ -649,6 +658,17 @@ struct Chat: Identifiable, Codable {
         } else {
             self.thinkingBudgetTokens = nil
         }
+        self.saveMemory = try container.decodeIfPresent(Bool.self, forKey: .saveMemory) ?? true
+        if let maxTokens = try container.decodeIfPresent(Int.self, forKey: .maxOutputTokens), maxTokens > 0 {
+            self.maxOutputTokens = maxTokens
+        } else {
+            self.maxOutputTokens = nil
+        }
+        if let seed = try container.decodeIfPresent(UInt64.self, forKey: .generationSeed) {
+            self.generationSeed = seed
+        } else {
+            self.generationSeed = nil
+        }
         self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false
         self.toolCodeInterpreterEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolCodeInterpreterEnabled) ?? true
         _ = try container.decodeIfPresent(Bool.self, forKey: .toolLocationEnabled)
@@ -669,6 +689,9 @@ struct Chat: Identifiable, Codable {
         try container.encode(reasoningLevel, forKey: .reasoningLevel)
         try container.encode(thinkingEnabled, forKey: .thinkingEnabled)
         try container.encodeIfPresent(thinkingBudgetTokens, forKey: .thinkingBudgetTokens)
+        try container.encode(saveMemory, forKey: .saveMemory)
+        try container.encodeIfPresent(maxOutputTokens, forKey: .maxOutputTokens)
+        try container.encodeIfPresent(generationSeed, forKey: .generationSeed)
         try container.encode(toolsEnabled, forKey: .toolsEnabled)
         try container.encode(toolCodeInterpreterEnabled, forKey: .toolCodeInterpreterEnabled)
         try container.encode(toolWebFetchEnabled, forKey: .toolWebFetchEnabled)
@@ -713,6 +736,9 @@ struct ChatSettingsValues: Equatable {
     var reasoningLevel: LLMReasoningLevel
     var thinkingEnabled: Bool
     var thinkingBudgetTokens: Int?
+    var saveMemory: Bool
+    var maxOutputTokens: Int?
+    var generationSeed: UInt64?
     var toolsEnabled: Bool
     var toolCodeInterpreterEnabled: Bool
     var toolWebSearchEnabled: Bool
@@ -726,6 +752,9 @@ struct ChatSettingsValues: Equatable {
         reasoningLevel: LLMReasoningLevel,
         thinkingEnabled: Bool,
         thinkingBudgetTokens: Int?,
+        saveMemory: Bool,
+        maxOutputTokens: Int?,
+        generationSeed: UInt64?,
         toolsEnabled: Bool,
         toolCodeInterpreterEnabled: Bool,
         toolWebSearchEnabled: Bool,
@@ -738,6 +767,9 @@ struct ChatSettingsValues: Equatable {
         self.reasoningLevel = reasoningLevel
         self.thinkingEnabled = thinkingEnabled
         self.thinkingBudgetTokens = thinkingBudgetTokens
+        self.saveMemory = saveMemory
+        self.maxOutputTokens = maxOutputTokens
+        self.generationSeed = generationSeed
         self.toolsEnabled = toolsEnabled
         self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
         self.toolWebSearchEnabled = toolWebSearchEnabled
@@ -753,6 +785,9 @@ struct ChatSettingsValues: Equatable {
             reasoningLevel: chat.reasoningLevel,
             thinkingEnabled: chat.thinkingEnabled,
             thinkingBudgetTokens: chat.thinkingBudgetTokens,
+            saveMemory: chat.saveMemory,
+            maxOutputTokens: chat.maxOutputTokens,
+            generationSeed: chat.generationSeed,
             toolsEnabled: chat.toolsEnabled,
             toolCodeInterpreterEnabled: chat.toolCodeInterpreterEnabled,
             toolWebSearchEnabled: chat.toolWebSearchEnabled,
@@ -763,6 +798,8 @@ struct ChatSettingsValues: Equatable {
 
     static func fromUserDefaults(_ defaults: UserDefaults = .standard) -> ChatSettingsValues {
         let storedBudget = defaults.object(forKey: "thinkingBudgetTokens") as? Int
+        let storedMaxTokens = defaults.object(forKey: "maxOutputTokens") as? Int
+        let storedSeed = (defaults.object(forKey: "generationSeed") as? NSNumber)?.uint64Value
         return ChatSettingsValues(
             systemPrompt: defaults.string(forKey: "systemPrompt") ?? "You are a helpful assistant.",
             temperature: defaults.object(forKey: "temperature") as? Double ?? 1.0,
@@ -774,6 +811,9 @@ struct ChatSettingsValues: Equatable {
             ) ?? .moderate,
             thinkingEnabled: defaults.object(forKey: "thinkingEnabled") as? Bool ?? true,
             thinkingBudgetTokens: (storedBudget ?? 0) > 0 ? storedBudget : nil,
+            saveMemory: defaults.object(forKey: "saveMemory") as? Bool ?? true,
+            maxOutputTokens: (storedMaxTokens ?? 0) > 0 ? storedMaxTokens : nil,
+            generationSeed: storedSeed,
             toolsEnabled: defaults.object(forKey: "toolsEnabled") as? Bool ?? false,
             toolCodeInterpreterEnabled: defaults.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true,
             toolWebSearchEnabled: defaults.object(forKey: "toolWebSearchEnabled") as? Bool ?? true,

@@ -164,6 +164,7 @@ struct ModelPickerView: View {
                     Text(option.description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    ModelMediaBadges(capabilities: AttachmentMediaSupport.capabilities(for: option.choice))
                     if !option.isAvailable, let note = option.unavailabilityNote {
                         Text(note)
                             .font(.caption2)
@@ -196,6 +197,13 @@ struct ModelPickerView: View {
                     Text(item.id)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    ModelMediaBadges(
+                        capabilities: HuggingFaceModelCatalog.mediaCapabilities(
+                            id: item.id,
+                            pipelineTag: item.pipelineTag,
+                            tags: item.tags
+                        )
+                    )
                 }
                 Spacer()
                 if case .failed = item.status {
@@ -240,10 +248,18 @@ struct ModelPickerView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let tag = model.pipelineTag {
-                        Text(tag)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        if let tag = model.pipelineTag {
+                            Text(tag)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        ModelMediaBadges(
+                            capabilities: HuggingFaceModelCatalog.mediaCapabilities(
+                                id: model.id,
+                                pipelineTag: model.pipelineTag
+                            )
+                        )
                     }
                 }
                 Spacer()

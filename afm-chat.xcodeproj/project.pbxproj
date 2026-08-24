@@ -74,6 +74,8 @@
 		36F5E5242E50E024000034 /* readability-bridge.js in Resources */ = {isa = PBXBuildFile; fileRef = 36F5E5042E50E004000017 /* readability-bridge.js */; };
 		36F6A1112E50F011000111 /* MLXModelFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1012E50F001000101 /* MLXModelFactory.swift */; };
 		36F6A1122E50F012000112 /* HuggingFaceModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1022E50F002000102 /* HuggingFaceModelCatalog.swift */; };
+		36F8A1112E50F411000411 /* RecommendedModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F8A1012E50F401000401 /* RecommendedModelCatalog.swift */; };
+		36F8A1312E50F431000431 /* recommended-models.json in Resources */ = {isa = PBXBuildFile; fileRef = 36F8A1022E50F402000402 /* recommended-models.json */; };
 		36F6A1132E50F013000113 /* DownloadedModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1032E50F003000103 /* DownloadedModelStore.swift */; };
 		36F6A1142E50F014000114 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1042E50F004000104 /* ModelPickerView.swift */; };
 		36F6A1152E50F015000115 /* AddModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1052E50F005000105 /* AddModelView.swift */; };
@@ -85,6 +87,7 @@
 		36F6A1192E50F019000119 /* MLXTokenStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1092E50F009000109 /* MLXTokenStream.swift */; };
 		36F6A1212E50F021000121 /* MLXModelFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1012E50F001000101 /* MLXModelFactory.swift */; };
 		36F6A1222E50F022000122 /* HuggingFaceModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1022E50F002000102 /* HuggingFaceModelCatalog.swift */; };
+		36F8A1212E50F421000421 /* RecommendedModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F8A1012E50F401000401 /* RecommendedModelCatalog.swift */; };
 		36F6A1232E50F023000123 /* DownloadedModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1032E50F003000103 /* DownloadedModelStore.swift */; };
 		36F6A1242E50F024000124 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1042E50F004000104 /* ModelPickerView.swift */; };
 		36F6A1252E50F025000125 /* AddModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1052E50F005000105 /* AddModelView.swift */; };
@@ -160,6 +163,8 @@
 		36F5E5042E50E004000017 /* readability-bridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "readability-bridge.js"; sourceTree = "<group>"; };
 		36F6A1012E50F001000101 /* MLXModelFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXModelFactory.swift; sourceTree = "<group>"; };
 		36F6A1022E50F002000102 /* HuggingFaceModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuggingFaceModelCatalog.swift; sourceTree = "<group>"; };
+		36F8A1012E50F401000401 /* RecommendedModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendedModelCatalog.swift; sourceTree = "<group>"; };
+		36F8A1022E50F402000402 /* recommended-models.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "recommended-models.json"; sourceTree = "<group>"; };
 		36F6A1032E50F003000103 /* DownloadedModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadedModelStore.swift; sourceTree = "<group>"; };
 		36F6A1042E50F004000104 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
 		36F6A1052E50F005000105 /* AddModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddModelView.swift; sourceTree = "<group>"; };
@@ -285,6 +290,7 @@
 				36F6A1092E50F009000109 /* MLXTokenStream.swift */,
 				36F6A10B2E50F00B00010B /* MLXToolBridge.swift */,
 				36F6A1022E50F002000102 /* HuggingFaceModelCatalog.swift */,
+				36F8A1012E50F401000401 /* RecommendedModelCatalog.swift */,
 				36F6A1032E50F003000103 /* DownloadedModelStore.swift */,
 				36F6A1072E50F007000107 /* ModelLab.swift */,
 				36F6A10A2E50F00A00010A /* ModelDisplayName.swift */,
@@ -300,6 +306,7 @@
 				36D70A052DF9482B006889A7 /* appclip */,
 				36A7A3FD2DF923BC00B52461 /* Products */,
 				3658A6222DF9E89C00254350 /* Shared */,
+				36F8A1022E50F402000402 /* recommended-models.json */,
 			);
 			sourceTree = "<group>";
 		};
@@ -426,6 +433,7 @@
 			files = (
 				36F5E5212E50E021000031 /* readability.js in Resources */,
 				36F5E5222E50E022000032 /* readability-bridge.js in Resources */,
+				36F8A1312E50F431000431 /* recommended-models.json in Resources */,
 			);
 		};
 		36D70A022DF9482B006889A7 /* Resources */ = {
@@ -475,6 +483,7 @@
 				36F6A1192E50F019000119 /* MLXTokenStream.swift in Sources */,
 				36F6A11B2E50F01B00011B /* MLXToolBridge.swift in Sources */,
 				36F6A1122E50F012000112 /* HuggingFaceModelCatalog.swift in Sources */,
+				36F8A1112E50F411000411 /* RecommendedModelCatalog.swift in Sources */,
 				36F6A1132E50F013000113 /* DownloadedModelStore.swift in Sources */,
 				36F6A1142E50F014000114 /* ModelPickerView.swift in Sources */,
 				36F6A1152E50F015000115 /* AddModelView.swift in Sources */,
@@ -520,6 +529,7 @@
 				36F6A1292E50F029000129 /* MLXTokenStream.swift in Sources */,
 				36F6A12B2E50F02B00012B /* MLXToolBridge.swift in Sources */,
 				36F6A1222E50F022000122 /* HuggingFaceModelCatalog.swift in Sources */,
+				36F8A1212E50F421000421 /* RecommendedModelCatalog.swift in Sources */,
 				36F6A1232E50F023000123 /* DownloadedModelStore.swift in Sources */,
 				36F6A1242E50F024000124 /* ModelPickerView.swift in Sources */,
 				36F6A1252E50F025000125 /* AddModelView.swift in Sources */,

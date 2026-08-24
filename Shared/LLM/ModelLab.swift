@@ -102,3 +102,29 @@ struct AppleIntelligenceIcon: View {
         endPoint: .bottom
     )
 }
+
+struct ModelMediaBadges: View {
+    let capabilities: LLMMediaCapabilities
+
+    var body: some View {
+        if capabilities.vision || capabilities.video {
+            HStack(spacing: 6) {
+                if capabilities.vision {
+                    badge("Vision")
+                }
+                if capabilities.video {
+                    badge("Video")
+                }
+            }
+        }
+    }
+
+    private func badge(_ title: String) -> some View {
+        Text(title)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.secondary.opacity(0.12), in: Capsule())
+    }
+}

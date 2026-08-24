@@ -40,7 +40,11 @@ struct HuggingFaceModelSummary: Identifiable, Hashable, Sendable {
     }
 
     var isVision: Bool {
-        HuggingFaceModelCatalog.isVision(pipelineTag: pipelineTag, tags: tags)
+        mediaCapabilities.vision
+    }
+
+    var mediaCapabilities: LLMMediaCapabilities {
+        HuggingFaceModelCatalog.mediaCapabilities(id: id, pipelineTag: pipelineTag, tags: tags)
     }
 }
 
@@ -145,16 +149,47 @@ enum HuggingFaceModelCatalog {
         let modelType = HuggingFaceCache.modelType(for: id)?.lowercased()
         let visionFromTag = isVision(pipelineTag: pipelineTag, tags: tags)
         let visionFromType = modelType.map { vlmModelTypes.contains($0) } ?? false
-        let video = modelType.map { videoModelTypes.contains($0) } ?? false
+        let visionFromID = looksLikeVisionModel(id: id)
+        let videoFromType = modelType.map { videoModelTypes.contains($0) } ?? false
+        let videoFromID = looksLikeVideoModel(id: id)
         let audio = modelType.map { audioModelTypes.contains($0) } ?? false
-        let isSmol = modelType == "smolvlm"
+        let video = videoFromType || videoFromID
+        let vision = visionFromTag || visionFromType || visionFromID || video || audio
+        let isSmol = modelType == "smolvlm" || id.lowercased().contains("smolvlm")
         return LLMMediaCapabilities(
-            vision: visionFromTag || visionFromType || video || audio,
+            vision: vision,
             video: video,
             audio: audio,
             singleVideoOnly: isSmol,
             singleMediaType: isSmol
         )
+    }
+
+    /// Qwen-VL / SmolVLM ids before `config.json` is on disk.
+    nonisolated static func looksLikeVideoModel(id: String) -> Bool {
+        let lowered = id.lowercased()
+        let needles = [
+            "qwen2-vl", "qwen2_vl", "qwen2.5-vl", "qwen2.5_vl", "qwen2vl",
+            "qwen3-vl", "qwen3_vl", "qwen3vl",
+            "smolvlm", "smol-vlm"
+        ]
+        return needles.contains(where: { lowered.contains($0) })
+    }
+
+    nonisolated static func looksLikeVisionModel(id: String) -> Bool {
+        if looksLikeVideoModel(id: id) { return true }
+        let lowered = id.lowercased()
+        let needles = [
+            "paligemma", "pixtral", "llava", "idefics", "fastvlm",
+            "glm-ocr", "glm_ocr", "muse-glimmer", "muse_glimmer",
+            "lfm2-vl", "lfm2_vl", "-vl-", "_vl_", "-vlm", "_vlm"
+        ]
+        if needles.contains(where: { lowered.contains($0) }) {
+            return true
+        }
+        return lowered.hasSuffix("-vl") || lowered.hasSuffix("_vl")
+            || lowered.hasSuffix("-vlm") || lowered.hasSuffix("_vlm")
+            || lowered.contains("vlm")
     }
 
     /// Hugging Face ids and `model_type` values for the Gemma 4 family.
@@ -215,22 +250,58 @@ enum HuggingFaceModelCatalog {
 
         let decoded = try JSONDecoder().decode([HubModelPayload].self, from: data)
         return decoded.compactMap { payload in
-            let id = payload.id ?? payload.modelId
-            guard let id, !id.isEmpty else { return nil }
-            guard isSupported(pipelineTag: payload.pipelineTag, tags: payload.tags ?? []) else {
+            guard let summary = summary(from: payload) else { return nil }
+            guard isSupported(pipelineTag: summary.pipelineTag, tags: summary.tags) else {
                 return nil
             }
-            return HuggingFaceModelSummary(
-                id: id,
-                downloads: payload.downloads ?? 0,
-                likes: payload.likes ?? 0,
-                pipelineTag: payload.pipelineTag,
-                tags: payload.tags ?? [],
-                createdAt: payload.createdAt.flatMap(parseHubDate),
-                trendingScore: payload.trendingScore,
-                sizeBytes: nil
-            )
+            return summary
         }
+    }
+
+    static func model(id: String) async throws -> HuggingFaceModelSummary {
+        let url = endpoint.appending(path: id)
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("afm-chat", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw URLError(.badServerResponse)
+        }
+
+        let payload = try JSONDecoder().decode(HubModelPayload.self, from: data)
+        guard let summary = summary(from: payload, fallbackID: id) else {
+            throw URLError(.cannotParseResponse)
+        }
+        return summary
+    }
+
+    static func unresolvedSummary(id: String) -> HuggingFaceModelSummary {
+        HuggingFaceModelSummary(
+            id: id,
+            downloads: 0,
+            likes: 0,
+            pipelineTag: nil,
+            tags: [],
+            createdAt: nil,
+            trendingScore: nil,
+            sizeBytes: nil
+        )
+    }
+
+    private static func summary(from payload: HubModelPayload, fallbackID: String? = nil) -> HuggingFaceModelSummary? {
+        let id = payload.id ?? payload.modelId ?? fallbackID
+        guard let id, !id.isEmpty else { return nil }
+        return HuggingFaceModelSummary(
+            id: id,
+            downloads: payload.downloads ?? 0,
+            likes: payload.likes ?? 0,
+            pipelineTag: payload.pipelineTag,
+            tags: payload.tags ?? [],
+            createdAt: payload.createdAt.flatMap(parseHubDate),
+            trendingScore: payload.trendingScore,
+            sizeBytes: nil
+        )
     }
 
     nonisolated static func repositorySize(id: String) async -> Int64? {

@@ -30,6 +30,10 @@ public enum LLMThinkingBudget {
     public static let presets = [512, 1024, 2048, 4096, 8192]
 }
 
+public enum LLMMaxOutputTokens {
+    public static let presets = [256, 512, 1024, 2048, 4096, 8192]
+}
+
 public enum LLMModelChoice: Hashable, Codable, Identifiable, Sendable {
     case onDevice
     case privateCloudCompute
@@ -295,6 +299,9 @@ public struct LLMSessionConfiguration: Sendable {
     public var reasoningLevel: LLMReasoningLevel
     public var thinkingEnabled: Bool
     public var thinkingBudgetTokens: Int?
+    public var saveMemory: Bool
+    public var maxOutputTokens: Int?
+    public var generationSeed: UInt64?
     public var history: [LLMHistoryEntry]
     public var guardrails: LLMGuardrailsMode
 
@@ -304,6 +311,9 @@ public struct LLMSessionConfiguration: Sendable {
         reasoningLevel: LLMReasoningLevel = .moderate,
         thinkingEnabled: Bool = true,
         thinkingBudgetTokens: Int? = nil,
+        saveMemory: Bool = true,
+        maxOutputTokens: Int? = nil,
+        generationSeed: UInt64? = nil,
         history: [LLMHistoryEntry] = [],
         guardrails: LLMGuardrailsMode = .default
     ) {
@@ -312,6 +322,9 @@ public struct LLMSessionConfiguration: Sendable {
         self.reasoningLevel = reasoningLevel
         self.thinkingEnabled = thinkingEnabled
         self.thinkingBudgetTokens = thinkingBudgetTokens
+        self.saveMemory = saveMemory
+        self.maxOutputTokens = maxOutputTokens
+        self.generationSeed = generationSeed
         self.history = history
         self.guardrails = guardrails
     }

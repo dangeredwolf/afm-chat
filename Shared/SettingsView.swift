@@ -20,6 +20,9 @@ final class ChatSettingsDraft: ObservableObject {
     @Published var reasoningLevel: LLMReasoningLevel
     @Published var thinkingEnabled: Bool
     @Published var thinkingBudgetTokens: Int?
+    @Published var saveMemory: Bool
+    @Published var maxOutputTokens: Int?
+    @Published var generationSeed: UInt64?
     @Published var toolsEnabled: Bool
     @Published var toolCodeInterpreterEnabled: Bool
     @Published var toolWebSearchEnabled: Bool
@@ -37,6 +40,9 @@ final class ChatSettingsDraft: ObservableObject {
         self.reasoningLevel = values.reasoningLevel
         self.thinkingEnabled = values.thinkingEnabled
         self.thinkingBudgetTokens = values.thinkingBudgetTokens
+        self.saveMemory = values.saveMemory
+        self.maxOutputTokens = values.maxOutputTokens
+        self.generationSeed = values.generationSeed
         self.toolsEnabled = values.toolsEnabled
         self.toolCodeInterpreterEnabled = values.toolCodeInterpreterEnabled
         self.toolWebSearchEnabled = values.toolWebSearchEnabled
@@ -85,6 +91,9 @@ final class ChatSettingsDraft: ObservableObject {
             reasoningLevel: reasoningLevel,
             thinkingEnabled: thinkingEnabled,
             thinkingBudgetTokens: thinkingBudgetTokens,
+            saveMemory: saveMemory,
+            maxOutputTokens: maxOutputTokens,
+            generationSeed: generationSeed,
             toolsEnabled: toolsEnabled,
             toolCodeInterpreterEnabled: toolCodeInterpreterEnabled,
             toolWebSearchEnabled: toolWebSearchEnabled,
@@ -160,6 +169,7 @@ struct ModelSettingsView: View {
                 appleReasoningSection
             } else if draft.model.mlxModelID != nil {
                 mlxThinkingSection
+                mlxGenerationSection
             }
         }
         .navigationTitle("Model Settings")
@@ -224,6 +234,76 @@ struct ModelSettingsView: View {
                     .foregroundColor(.secondary)
             }
         }
+    }
+
+    private var mlxGenerationSection: some View {
+        Section(header: Text("Generation")) {
+            Toggle("Save Memory", isOn: $draft.saveMemory)
+                .disabled(!isEditable)
+                .opacity(isEditable ? 1.0 : 0.6)
+
+            Text("Uses a 4-bit KV cache so long chats take less RAM, with a small quality tradeoff.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Picker("Max Output Tokens", selection: $draft.maxOutputTokens) {
+                Text("Unlimited").tag(Optional<Int>.none)
+                ForEach(LLMMaxOutputTokens.presets, id: \.self) { tokens in
+                    Text("\(tokens) tokens").tag(Optional(tokens))
+                }
+            }
+            .disabled(!isEditable)
+            .opacity(isEditable ? 1.0 : 0.6)
+
+            Text("Stops the reply after this many tokens, including thinking.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Toggle("Fixed Seed", isOn: usesFixedSeed)
+                .disabled(!isEditable)
+                .opacity(isEditable ? 1.0 : 0.6)
+
+            if draft.generationSeed != nil {
+                HStack {
+                    TextField("Seed", value: seedValue, format: .number.grouping(.never))
+                        .disabled(!isEditable)
+                    Button {
+                        draft.generationSeed = UInt64.random(in: 0...9_999_999)
+                    } label: {
+                        Image(systemName: "shuffle")
+                    }
+                    .disabled(!isEditable)
+                    .accessibilityLabel("Shuffle seed")
+                }
+                .opacity(isEditable ? 1.0 : 0.6)
+            }
+
+            Text("Reuse the same seed so the same prompt produces a more repeatable reply.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var usesFixedSeed: Binding<Bool> {
+        Binding(
+            get: { draft.generationSeed != nil },
+            set: { enabled in
+                if enabled {
+                    if draft.generationSeed == nil {
+                        draft.generationSeed = UInt64.random(in: 0...9_999_999)
+                    }
+                } else {
+                    draft.generationSeed = nil
+                }
+            }
+        )
+    }
+
+    private var seedValue: Binding<UInt64> {
+        Binding(
+            get: { draft.generationSeed ?? 0 },
+            set: { draft.generationSeed = $0 }
+        )
     }
 }
 

@@ -184,6 +184,9 @@ class ChatManager: ObservableObject {
                 reasoningLevel: chat?.reasoningLevel ?? .moderate,
                 thinkingEnabled: chat?.thinkingEnabled ?? true,
                 thinkingBudgetTokens: chat?.thinkingBudgetTokens,
+                saveMemory: chat?.saveMemory ?? true,
+                maxOutputTokens: chat?.maxOutputTokens,
+                generationSeed: chat?.generationSeed,
                 history: history,
                 guardrails: .permissiveContentTransformations
             )
@@ -290,6 +293,9 @@ class ChatManager: ObservableObject {
                            reasoningLevel: defaults.reasoningLevel,
                            thinkingEnabled: defaults.thinkingEnabled,
                            thinkingBudgetTokens: defaults.thinkingBudgetTokens,
+                           saveMemory: defaults.saveMemory,
+                           maxOutputTokens: defaults.maxOutputTokens,
+                           generationSeed: defaults.generationSeed,
                            toolsEnabled: defaults.toolsEnabled,
                            toolCodeInterpreterEnabled: defaults.toolCodeInterpreterEnabled,
                            toolWebSearchEnabled: defaults.toolWebSearchEnabled,
@@ -340,7 +346,10 @@ class ChatManager: ObservableObject {
         appendDateToSystemPrompt: Bool,
         perTools: (code: Bool, webSearch: Bool, webFetch: Bool)? = nil,
         thinkingEnabled: Bool,
-        thinkingBudgetTokens: Int?
+        thinkingBudgetTokens: Int?,
+        saveMemory: Bool,
+        maxOutputTokens: Int?,
+        generationSeed: UInt64?
     ) {
         guard !isLoading, var chat = currentChat else { return }
         chat.systemPrompt = systemPrompt
@@ -349,6 +358,9 @@ class ChatManager: ObservableObject {
         chat.reasoningLevel = reasoningLevel
         chat.thinkingEnabled = thinkingEnabled
         chat.thinkingBudgetTokens = thinkingBudgetTokens
+        chat.saveMemory = saveMemory
+        chat.maxOutputTokens = maxOutputTokens
+        chat.generationSeed = generationSeed
         chat.toolsEnabled = toolsEnabled
         chat.appendDateToSystemPrompt = appendDateToSystemPrompt
         if let perTools = perTools {
@@ -371,7 +383,10 @@ class ChatManager: ObservableObject {
             appendDateToSystemPrompt: appendDateToSystemPrompt,
             perTools: perTools,
             thinkingEnabled: thinkingEnabled,
-            thinkingBudgetTokens: thinkingBudgetTokens
+            thinkingBudgetTokens: thinkingBudgetTokens,
+            saveMemory: saveMemory,
+            maxOutputTokens: maxOutputTokens,
+            generationSeed: generationSeed
         )
 
         saveChats()
@@ -405,7 +420,10 @@ class ChatManager: ObservableObject {
                     webFetch: values.toolWebFetchEnabled
                 ),
                 thinkingEnabled: values.thinkingEnabled,
-                thinkingBudgetTokens: values.thinkingBudgetTokens
+                thinkingBudgetTokens: values.thinkingBudgetTokens,
+                saveMemory: values.saveMemory,
+                maxOutputTokens: values.maxOutputTokens,
+                generationSeed: values.generationSeed
             )
         case .defaults:
             updateDefaultSettings(
@@ -421,7 +439,10 @@ class ChatManager: ObservableObject {
                     webFetch: values.toolWebFetchEnabled
                 ),
                 thinkingEnabled: values.thinkingEnabled,
-                thinkingBudgetTokens: values.thinkingBudgetTokens
+                thinkingBudgetTokens: values.thinkingBudgetTokens,
+                saveMemory: values.saveMemory,
+                maxOutputTokens: values.maxOutputTokens,
+                generationSeed: values.generationSeed
             )
         }
     }
@@ -435,7 +456,10 @@ class ChatManager: ObservableObject {
         appendDateToSystemPrompt: Bool,
         perTools: (code: Bool, webSearch: Bool, webFetch: Bool)? = nil,
         thinkingEnabled: Bool,
-        thinkingBudgetTokens: Int?
+        thinkingBudgetTokens: Int?,
+        saveMemory: Bool,
+        maxOutputTokens: Int?,
+        generationSeed: UInt64?
     ) {
         UserDefaults.standard.set(systemPrompt, forKey: "systemPrompt")
         UserDefaults.standard.set(temperature, forKey: "temperature")
@@ -446,6 +470,17 @@ class ChatManager: ObservableObject {
             UserDefaults.standard.set(thinkingBudgetTokens, forKey: "thinkingBudgetTokens")
         } else {
             UserDefaults.standard.removeObject(forKey: "thinkingBudgetTokens")
+        }
+        UserDefaults.standard.set(saveMemory, forKey: "saveMemory")
+        if let maxOutputTokens, maxOutputTokens > 0 {
+            UserDefaults.standard.set(maxOutputTokens, forKey: "maxOutputTokens")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "maxOutputTokens")
+        }
+        if let generationSeed {
+            UserDefaults.standard.set(NSNumber(value: generationSeed), forKey: "generationSeed")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "generationSeed")
         }
         UserDefaults.standard.set(toolsEnabled, forKey: "toolsEnabled")
         UserDefaults.standard.set(appendDateToSystemPrompt, forKey: "appendDateToSystemPrompt")
@@ -467,7 +502,10 @@ class ChatManager: ObservableObject {
                 toolsEnabled: currentToolsEnabled,
                 appendDateToSystemPrompt: currentAppendDateToSystemPrompt,
                 thinkingEnabled: currentThinkingEnabled,
-                thinkingBudgetTokens: currentThinkingBudgetTokens
+                thinkingBudgetTokens: currentThinkingBudgetTokens,
+                saveMemory: currentChat?.saveMemory ?? true,
+                maxOutputTokens: currentChat?.maxOutputTokens,
+                generationSeed: currentChat?.generationSeed
             )
         case .defaults:
             UserDefaults.standard.set(model.rawValue, forKey: "model")

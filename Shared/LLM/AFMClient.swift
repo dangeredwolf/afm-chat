@@ -875,6 +875,9 @@ private final class MLXSession: LLMSession {
             temperature: temperature,
             thinkingEnabled: configuration.thinkingEnabled,
             thinkingBudgetTokens: configuration.thinkingBudgetTokens,
+            saveMemory: configuration.saveMemory,
+            maxOutputTokens: configuration.maxOutputTokens,
+            generationSeed: configuration.generationSeed,
             enabledToolIDs: enabledToolIDs,
             attachmentRegistry: attachmentRegistry
         )
