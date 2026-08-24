@@ -41,6 +41,8 @@
 		36C4D5E82E45DB7000CDC79C /* ChatSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C4D5E62E45DB7000CDC79C /* ChatSearch.swift */; };
 		36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
 		36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */; };
+		36F7A3022E50F302000302 /* AppToolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F7A3012E50F301000301 /* AppToolCatalog.swift */; };
+		36F7A3032E50F303000303 /* AppToolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F7A3012E50F301000301 /* AppToolCatalog.swift */; };
 		36D70A102DF9482C006889A7 /* appclip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = 36D70A042DF9482B006889A7 /* appclip.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F992E137295009B8F2F /* SearchTool.swift */; };
 		36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EC3F992E137295009B8F2F /* SearchTool.swift */; };
@@ -138,6 +140,7 @@
 		36B2C3D32E45DB6F00CDC79C /* ChatDateGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDateGrouping.swift; sourceTree = "<group>"; };
 		36C4D5E62E45DB7000CDC79C /* ChatSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSearch.swift; sourceTree = "<group>"; };
 		36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JavaScriptTool.swift; sourceTree = "<group>"; };
+		36F7A3012E50F301000301 /* AppToolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppToolCatalog.swift; sourceTree = "<group>"; };
 		36D70A042DF9482B006889A7 /* appclip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = appclip.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		36EC3F992E137295009B8F2F /* SearchTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchTool.swift; sourceTree = "<group>"; };
 		36F1A1012E50A001000001 /* ChatAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatAttachments.swift; sourceTree = "<group>"; };
@@ -256,6 +259,7 @@
 		3658A6952DFBA8A500254350 /* Tools */ = {
 			isa = PBXGroup;
 			children = (
+				36F7A3012E50F301000301 /* AppToolCatalog.swift */,
 				36CBE6372E0B94E300FE3FD4 /* JavaScriptTool.swift */,
 				36F2B2022E50B002000009 /* ReadAttachmentTool.swift */,
 				36EC3F992E137295009B8F2F /* SearchTool.swift */,
@@ -442,6 +446,7 @@
 				3658A6242DF9E89C00254350 /* ChatModels.swift in Sources */,
 				36B2C3D42E45DB6F00CDC79C /* ChatDateGrouping.swift in Sources */,
 				36C4D5E72E45DB7000CDC79C /* ChatSearch.swift in Sources */,
+				36F7A3022E50F302000302 /* AppToolCatalog.swift in Sources */,
 				36EC3F9A2E137295009B8F2F /* SearchTool.swift in Sources */,
 				3658A6252DF9E89C00254350 /* ChatBubble.swift in Sources */,
 				3658A6262DF9E89C00254350 /* SettingsView.swift in Sources */,
@@ -482,6 +487,7 @@
 				36984D672E45DB6C00CDC79C /* AFMModelCatalog.swift in Sources */,
 				36984D612E45DB6A00CDC79C /* LLMTypes.swift in Sources */,
 				3658A6282DF9E89C00254350 /* ChatContainerView.swift in Sources */,
+				36F7A3032E50F303000303 /* AppToolCatalog.swift in Sources */,
 				36EC3F9B2E137295009B8F2F /* SearchTool.swift in Sources */,
 				3658A6292DF9E89C00254350 /* ChatModels.swift in Sources */,
 				36B2C3D52E45DB6F00CDC79C /* ChatDateGrouping.swift in Sources */,

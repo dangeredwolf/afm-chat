@@ -4,7 +4,7 @@ nonisolated enum ChatGenerationPhase: Equatable, Sendable {
     case idle
     case loadingModel(name: String, fraction: Double?)
     case compiling(name: String)
-    case generating
+    case generating(name: String)
 }
 
 #if AFM_MLX

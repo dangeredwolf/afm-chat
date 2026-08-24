@@ -176,12 +176,14 @@ private actor ExaAuth {
 
 /// A tool that searches the web using the exa.ai search API
 struct SearchTool: Tool {
-    let name = "Web Search"
-    let description = "Search the web for information on any topic to retrieve up-to-date information. Returns relevant pages, URLs, and metadata."
-    
+    private static let definition = AppToolID.webSearch.definition
+
+    var name: String { Self.definition.displayName }
+    var description: String { Self.definition.description }
+    var parameters: GenerationSchema { Self.definition.generationSchema() }
+
     @Generable
     struct Arguments {
-        @Guide(description: "The search query to find relevant web content")
         var query: String
     }
     

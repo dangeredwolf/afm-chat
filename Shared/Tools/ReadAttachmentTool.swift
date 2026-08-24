@@ -38,8 +38,11 @@ struct AttachmentRegistry: Sendable {
 
 /// Reads text content from user-attached non-image files in the current chat.
 struct ReadAttachmentTool: Tool {
-    let name = "Read Attachment"
-    let description = "Read the text content of a file the user attached to this chat. Use when the user asks about attached documents, code, data, or PDFs. Supported formats include plain text, markdown, JSON, CSV, code files, and PDF."
+    private static let definition = AppToolID.readAttachment.definition
+
+    var name: String { Self.definition.displayName }
+    var description: String { Self.definition.description }
+    var parameters: GenerationSchema { Self.definition.generationSchema() }
 
     private let registry: AttachmentRegistry
 
@@ -49,13 +52,8 @@ struct ReadAttachmentTool: Tool {
 
     @Generable
     struct Arguments {
-        @Guide(description: "Exact filename label shown in the attachment note, e.g. report.pdf")
         var filename: String
-
-        @Guide(description: "Character offset for pagination when reading large files. Default 0.")
         var offset: Int?
-
-        @Guide(description: "Maximum characters to return. Default 8000.")
         var maxCharacters: Int?
     }
 

@@ -168,24 +168,23 @@ struct ToolCallView: View {
 }
 
 private func toolCallTitle(name: String, status: ToolCallStatus) -> String {
-    let key = name.lowercased()
     let inProgress = status == .pending || status == .executing
     let failed = status == .failed
 
-    switch key {
-    case "web search", "websearch", "web_search":
+    switch AppToolCatalog.resolve(name)?.id {
+    case .webSearch:
         if failed { return "Search failed" }
         return inProgress ? "Searching the web" : "Searched the web"
-    case "web fetch", "webfetch", "web_fetch":
+    case .webFetch:
         if failed { return "Couldn't read page" }
         return inProgress ? "Reading page" : "Read page"
-    case "code interpreter", "codeinterpreter", "javascript", "code_interpreter":
+    case .codeInterpreter:
         if failed { return "Code failed" }
         return inProgress ? "Running code" : "Ran code"
-    case "read attachment", "readattachment", "read_attachment":
+    case .readAttachment:
         if failed { return "Couldn't read file" }
         return inProgress ? "Reading file" : "Read file"
-    default:
+    case nil:
         if failed { return "\(name) failed" }
         return inProgress ? "Using \(name)" : "Used \(name)"
     }
@@ -627,10 +626,6 @@ struct ChatBubble: View {
                     StreamingStatusBubble(phase: generationPhase)
                         .frame(maxWidth: maxBubbleWidth, alignment: .leading)
                 }
-
-                Text(message.timestamp, style: .time)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
             }
 
             if !message.isUser {
@@ -664,13 +659,11 @@ private struct StreamingStatusBubble: View {
         switch phase {
         case .loadingModel(let name, let fraction):
             if let fraction, fraction > 0, fraction < 1 {
-                return "Loading \(Int((fraction * 100).rounded()))%"
+                return "Preparing \(name) \(Int((fraction * 100).rounded()))%"
             }
-            return "Loading…"
-        case .compiling(let name):
             return "Preparing \(name)…"
-        case .generating:
-            return "Loading…"
+        case .compiling(let name), .generating(let name):
+            return "Preparing \(name)…"
         case .idle:
             return "Waiting…"
         }

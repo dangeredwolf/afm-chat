@@ -235,6 +235,14 @@ struct ToolsSettingsView: View {
         draft.scope == .defaults || !chatManager.isLoading
     }
 
+    private var webSearchAvailable: Bool {
+        AppToolID.webSearch.isAvailable
+    }
+
+    private var webSearchEnabledBinding: Binding<Bool> {
+        webSearchAvailable ? $draft.toolWebSearchEnabled : .constant(false)
+    }
+
     var body: some View {
         Form {
             Section {
@@ -248,27 +256,35 @@ struct ToolsSettingsView: View {
                     Toggle(isOn: $draft.toolCodeInterpreterEnabled) {
                         HStack {
                             Image(systemName: "gear").foregroundColor(.blue)
-                            Text("Code Interpreter")
+                            Text(AppToolID.codeInterpreter.definition.displayName)
                         }
                     }
                     .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
                     .disabled(!isEditable)
                     .opacity(isEditable ? 1.0 : 0.6)
 
-                    Toggle(isOn: $draft.toolWebSearchEnabled) {
+                    Toggle(isOn: webSearchEnabledBinding) {
                         HStack {
-                            Image(systemName: "magnifyingglass").foregroundColor(.orange)
-                            Text("Web Search")
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(webSearchAvailable ? .orange : .secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(AppToolID.webSearch.definition.displayName)
+                                if !webSearchAvailable {
+                                    Text("Temporarily unavailable")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
                     .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
-                    .disabled(!isEditable)
-                    .opacity(isEditable ? 1.0 : 0.6)
+                    .disabled(!isEditable || !webSearchAvailable)
+                    .opacity(isEditable && webSearchAvailable ? 1.0 : 0.6)
 
                     Toggle(isOn: $draft.toolWebFetchEnabled) {
                         HStack {
                             Image(systemName: "doc.text").foregroundColor(.green)
-                            Text("Web Fetch")
+                            Text(AppToolID.webFetch.definition.displayName)
                         }
                     }
                     .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))

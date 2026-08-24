@@ -156,14 +156,8 @@ class ChatManager: ObservableObject {
         // Create session with conditional tools based on chat settings and per-tool flags
         var toolList: [LLMTool] = []
         if toolsEnabled {
-            if chat?.toolCodeInterpreterEnabled ?? true {
-                toolList.append(AnyLLMTool(name: "Code Interpreter", description: "Assist the user by executing JavaScript code to perform advanced calculations, data analysis, web requests, etc.", providerPayloads: ["afmTool": JavaScriptTool()]))
-            }
-            if chat?.toolWebSearchEnabled ?? true {
-                toolList.append(AnyLLMTool(name: "Web Search", description: "Search the web for information on any topic to retrieve up-to-date information.", providerPayloads: ["afmTool": SearchTool()]))
-            }
-            if chat?.toolWebFetchEnabled ?? true {
-                toolList.append(AnyLLMTool(name: "Web Fetch", description: "Fetch and extract the main readable content from a specific HTTPS URL.", providerPayloads: ["afmTool": WebFetchTool()]))
+            for definition in AppToolCatalog.userTogglable where isUserToolEnabled(definition.id, in: chat) {
+                toolList.append(definition.asLLMTool())
             }
         }
 
@@ -172,11 +166,7 @@ class ChatManager: ObservableObject {
 
         if !fileAttachments.isEmpty {
             let registry = AttachmentRegistry(attachments: fileAttachments)
-            toolList.append(AnyLLMTool(
-                name: "Read Attachment",
-                description: "Read text content from a user-attached file, including documents, code, and PDFs.",
-                providerPayloads: ["afmTool": ReadAttachmentTool(registry: registry)]
-            ))
+            toolList.append(AppToolID.readAttachment.definition.asLLMTool(attachmentRegistry: registry))
         }
         
         return LLMProviderManager.shared.client.createSession(
@@ -1161,7 +1151,7 @@ class ChatManager: ObservableObject {
             return .loadingModel(name: model.displayName, fraction: nil)
         }
         #endif
-        return .generating
+        return .generating(name: model.displayName)
     }
 
     private func releaseSessions(keepingMLX keepID: String?) {
@@ -1203,7 +1193,7 @@ class ChatManager: ObservableObject {
         }
 
         await MainActor.run {
-            self.generationPhase = .generating
+            self.generationPhase = .generating(name: chat.model.displayName)
         }
         let capabilities = AttachmentMediaSupport.capabilities(for: chat.model)
         let includeFileNames = chat.model.mlxModelID != nil
@@ -1276,20 +1266,22 @@ class ChatManager: ObservableObject {
         updateStoredChat(chat)
     }
 
-    // Get tool description for a given tool name
-    private func getToolDescription(for toolName: String) -> String {
-        switch toolName {
-        case "Code Interpreter", "code_interpreter":
-            return "Execute JavaScript code and returns the result"
-        case "Web Search", "web_search":
-            return "Search the web for information on any topic"
-        case "Read Attachment", "read_attachment":
-            return "Read or transcribe content from a user-attached file"
-        case "Web Fetch", "web_fetch":
-            return "Fetch and extract readable content from a web page"
-        default:
-            return "Execute tool: \(toolName)"
+    private func isUserToolEnabled(_ id: AppToolID, in chat: Chat?) -> Bool {
+        guard id.isAvailable else { return false }
+        switch id {
+        case .codeInterpreter:
+            chat?.toolCodeInterpreterEnabled ?? true
+        case .webSearch:
+            chat?.toolWebSearchEnabled ?? true
+        case .webFetch:
+            chat?.toolWebFetchEnabled ?? true
+        case .readAttachment:
+            true
         }
+    }
+
+    private func getToolDescription(for toolName: String) -> String {
+        AppToolCatalog.resolve(toolName)?.description ?? "Execute tool: \(toolName)"
     }
     
     

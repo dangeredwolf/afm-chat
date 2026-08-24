@@ -81,25 +81,10 @@ enum AFMTranscriptBuilder {
             return content
         }
 
-        switch toolName {
-        case "Web Search":
-            if let query = extractPropertyValue(named: "query", from: argumentsJSON) {
-                return GeneratedContent(properties: ["query": query])
-            }
-        case "Code Interpreter":
-            if let code = extractPropertyValue(named: "code", from: argumentsJSON) {
-                return GeneratedContent(properties: ["code": code])
-            }
-        case "Read Attachment":
-            if let filename = extractPropertyValue(named: "filename", from: argumentsJSON) {
-                return GeneratedContent(properties: ["filename": filename])
-            }
-        case "Web Fetch":
-            if let url = extractPropertyValue(named: "url", from: argumentsJSON) {
-                return GeneratedContent(properties: ["url": url])
-            }
-        default:
-            break
+        if let definition = AppToolCatalog.resolve(toolName),
+           let parameter = definition.primaryRequiredStringParameter,
+           let value = extractPropertyValue(named: parameter.name, from: argumentsJSON) {
+            return GeneratedContent(properties: [parameter.name: value])
         }
 
         return GeneratedContent(properties: [:])

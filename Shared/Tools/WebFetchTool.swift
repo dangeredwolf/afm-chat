@@ -8,18 +8,16 @@ import FoundationModels
 
 /// Fetches and extracts readable content from a web page using on-device Readability.js.
 struct WebFetchTool: Tool {
-    let name = "Web Fetch"
-    let description = "Fetch and extract the main readable content from a specific HTTPS URL. Use after Web Search when you need the full article, not just snippets. Supports pagination for long pages."
+    private static let definition = AppToolID.webFetch.definition
+
+    var name: String { Self.definition.displayName }
+    var description: String { Self.definition.description }
+    var parameters: GenerationSchema { Self.definition.generationSchema() }
 
     @Generable
     struct Arguments {
-        @Guide(description: "The HTTPS URL to fetch and extract readable content from")
         var url: String
-
-        @Guide(description: "Character offset for pagination when reading long pages. Default 0.")
         var offset: Int?
-
-        @Guide(description: "Maximum characters to return. Default 8000.")
         var maxCharacters: Int?
     }
 
