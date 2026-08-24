@@ -51,7 +51,11 @@ final class AFMClient: LLMClient {
             tools: afmTools,
             configuration: configuration
         )
-        return AFMSession(session: session, configuration: configuration)
+        return AFMSession(
+            session: session,
+            configuration: configuration,
+            instructions: instructions
+        )
     }
 }
 
@@ -87,6 +91,7 @@ private actor StreamToolCallEmitter {
 private final class AFMSession: LLMSession {
     private let session: LanguageModelSession
     private let configuration: LLMSessionConfiguration
+    private let instructions: String
     private let pipeline: AFMSessionPipeline
     private var lastMaxContentLength: Int = 0
     private var lastReasoningSignature: Int = 0
@@ -95,9 +100,10 @@ private final class AFMSession: LLMSession {
     private var didLogReasoningSignatureDump = false
     private var streamChunkIndex: Int = 0
 
-    init(session: LanguageModelSession, configuration: LLMSessionConfiguration) {
+    init(session: LanguageModelSession, configuration: LLMSessionConfiguration, instructions: String) {
         self.session = session
         self.configuration = configuration
+        self.instructions = instructions
         self.pipeline = AFMSessionPipeline.current
     }
 
@@ -119,6 +125,23 @@ private final class AFMSession: LLMSession {
     }
 
     func streamResponse(to prompt: LLMPrompt, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
+        #if AFM_MLX
+        if #available(iOS 27, *), let modelID = configuration.model.mlxModelID {
+            return MLXTokenStream.events(
+                modelID: modelID,
+                instructions: instructions,
+                history: configuration.history,
+                prompt: prompt,
+                temperature: temperature,
+                thinkingEnabled: configuration.thinkingEnabled,
+                thinkingBudgetTokens: configuration.thinkingBudgetTokens
+            )
+        }
+        #endif
+        return streamFoundationResponse(to: prompt, temperature: temperature)
+    }
+
+    private func streamFoundationResponse(to prompt: LLMPrompt, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             Task {
                 let toolCallEmitter = StreamToolCallEmitter()
@@ -126,13 +149,19 @@ private final class AFMSession: LLMSession {
                 let pollingTask = Task {
                     while !Task.isCancelled {
                         let extracted = self.extractFromTranscript(preferredEntries: nil)
+                        if extracted.responseContent.count > self.lastMaxContentLength {
+                            self.lastMaxContentLength = extracted.responseContent.count
+                            continuation.yield(.contentUpdated(fullText: extracted.responseContent))
+                        }
                         await toolCallEmitter.emitIfChanged(extracted.toolCalls, continuation: continuation)
-                        try? await Task.sleep(for: .milliseconds(100))
+                        self.yieldReasoningUpdate(extracted.reasoningSnapshot, continuation: continuation)
+                        try? await Task.sleep(for: .milliseconds(50))
                     }
                 }
 
                 do {
                     let supportsReasoning = AFMModelCatalog.supportsReasoning(configuration.model)
+                    lastMaxContentLength = 0
                     if supportsReasoning {
                         streamChunkIndex = 0
                         lastReasoningProbeSignature = 0

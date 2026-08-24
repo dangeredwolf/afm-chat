@@ -128,6 +128,8 @@ private struct ContextUsageDetailsView: View {
             .sorted { lhs, rhs in
                 if lhs.model == .onDevice { return true }
                 if rhs.model == .onDevice { return false }
+                if case .privateCloudCompute = lhs.model { return true }
+                if case .privateCloudCompute = rhs.model { return false }
                 return lhs.model.displayName < rhs.model.displayName
             }
     }

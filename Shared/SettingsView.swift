@@ -12,6 +12,8 @@ struct SettingsView: View {
     @Binding var temperature: Double
     @Binding var model: LLMModelChoice
     @Binding var reasoningLevel: LLMReasoningLevel
+    @Binding var thinkingEnabled: Bool
+    @Binding var thinkingBudgetTokens: Int?
     @Binding var toolsEnabled: Bool
     @Binding var toolCodeInterpreterEnabled: Bool
     @Binding var toolWebSearchEnabled: Bool
@@ -24,6 +26,8 @@ struct SettingsView: View {
     @State private var tempTemperature: Double = 1.0
     @State private var tempModel: LLMModelChoice = .onDevice
     @State private var tempReasoningLevel: LLMReasoningLevel = .moderate
+    @State private var tempThinkingEnabled: Bool = true
+    @State private var tempThinkingBudgetTokens: Int? = nil
     @State private var tempToolsEnabled: Bool = true
     @State private var tempToolCodeInterpreterEnabled: Bool = true
     @State private var tempToolWebSearchEnabled: Bool = true
@@ -78,34 +82,6 @@ struct SettingsView: View {
                     .opacity(isSettingsEditable ? 1.0 : 0.6)
                 }
 
-                Section(header: Text("Model")) {
-                    Text("Choose which Apple Intelligence model powers this chat.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    Picker("Model", selection: $tempModel) {
-                        ForEach(modelOptions) { option in
-                            Text(option.displayName).tag(option.choice)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .disabled(!isSettingsEditable)
-                    .opacity(isSettingsEditable ? 1.0 : 0.6)
-
-                    if let selectedModelOption {
-                        Text(selectedModelOption.description)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        if !selectedModelOption.isAvailable,
-                           let note = selectedModelOption.unavailabilityNote {
-                            Text(note)
-                                .font(.caption2)
-                                .foregroundColor(.orange)
-                        }
-                    }
-                }
-
                 Section(header: Text("Temperature")) {
                     Text("Controls randomness in responses. Lower values (0.0) make responses more focused and deterministic, while higher values (2.0) make them more creative and varied.")
                         .font(.caption)
@@ -137,23 +113,10 @@ struct SettingsView: View {
                 }
 
                 if supportsReasoningForSelectedModel {
-                    Section(header: Text("Reasoning Level")) {
-                        Text("Controls how much the model thinks before responding. Light is fastest; Deep allows more analysis.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        Picker("Reasoning Level", selection: $tempReasoningLevel) {
-                            ForEach(LLMReasoningLevel.allCases) { level in
-                                Text(level.displayName).tag(level)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(!isSettingsEditable)
-                        .opacity(isSettingsEditable ? 1.0 : 0.6)
-
-                        Text(tempReasoningLevel.description)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    if AFMModelCatalog.usesAppleReasoningLevels(tempModel) {
+                        appleReasoningSection
+                    } else {
+                        mlxThinkingSection
                     }
                 }
 
@@ -212,6 +175,14 @@ struct SettingsView: View {
                         temperature = tempTemperature
                         model = tempModel
                         reasoningLevel = tempReasoningLevel
+                        if tempModel.mlxModelID != nil {
+                            thinkingEnabled = AFMModelCatalog.mlxCanDisableThinking(tempModel)
+                                ? tempThinkingEnabled
+                                : true
+                        } else {
+                            thinkingEnabled = tempThinkingEnabled
+                        }
+                        thinkingBudgetTokens = tempThinkingBudgetTokens
                         toolsEnabled = tempToolsEnabled
                         toolCodeInterpreterEnabled = tempToolCodeInterpreterEnabled
                         toolWebSearchEnabled = tempToolWebSearchEnabled
@@ -233,11 +204,77 @@ struct SettingsView: View {
             tempTemperature = temperature
             tempModel = model
             tempReasoningLevel = reasoningLevel
+            tempThinkingEnabled = thinkingEnabled
+            if model.mlxModelID != nil, !AFMModelCatalog.mlxCanDisableThinking(model) {
+                tempThinkingEnabled = true
+            }
+            tempThinkingBudgetTokens = thinkingBudgetTokens
             tempToolsEnabled = toolsEnabled
             tempToolCodeInterpreterEnabled = toolCodeInterpreterEnabled
             tempToolWebSearchEnabled = toolWebSearchEnabled
             tempToolWebFetchEnabled = toolWebFetchEnabled
             tempAppendDateToSystemPrompt = appendDateToSystemPrompt
+        }
+        .onChange(of: tempModel) { _, newModel in
+            if newModel.mlxModelID != nil, !AFMModelCatalog.mlxCanDisableThinking(newModel) {
+                tempThinkingEnabled = true
+            }
+        }
+    }
+
+    private var appleReasoningSection: some View {
+        Section(header: Text("Reasoning Level")) {
+            Text("Controls how much the model thinks before responding. Light is fastest; Deep allows more analysis.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Picker("Reasoning Level", selection: $tempReasoningLevel) {
+                ForEach(LLMReasoningLevel.allCases) { level in
+                    Text(level.displayName).tag(level)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(!isSettingsEditable)
+            .opacity(isSettingsEditable ? 1.0 : 0.6)
+
+            Text(tempReasoningLevel.description)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var mlxThinkingSection: some View {
+        let canDisable = AFMModelCatalog.mlxCanDisableThinking(tempModel)
+        let supportsBudget = AFMModelCatalog.mlxSupportsThinkingBudget(tempModel)
+        return Section(header: Text("Thinking")) {
+            Text("When thinking is on, the model reasons before answering. You can inspect those tokens in the chat.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Toggle("Thinking", isOn: $tempThinkingEnabled)
+                .disabled(!isSettingsEditable || !canDisable)
+                .opacity(isSettingsEditable ? 1.0 : 0.6)
+
+            if !canDisable {
+                Text("This model always thinks and cannot turn it off.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            if supportsBudget && (tempThinkingEnabled || !canDisable) {
+                Picker("Thinking Budget", selection: $tempThinkingBudgetTokens) {
+                    Text("Unlimited").tag(Optional<Int>.none)
+                    ForEach(LLMThinkingBudget.presets, id: \.self) { tokens in
+                        Text("\(tokens) tokens").tag(Optional(tokens))
+                    }
+                }
+                .disabled(!isSettingsEditable)
+                .opacity(isSettingsEditable ? 1.0 : 0.6)
+
+                Text("Caps how many tokens the model may spend thinking before it answers.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }

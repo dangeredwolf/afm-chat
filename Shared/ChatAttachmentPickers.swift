@@ -6,6 +6,32 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import CoreTransferable
+
+struct ImportedMovie: Transferable {
+    let url: URL
+
+    var suggestedName: String {
+        let name = url.lastPathComponent
+        return name.isEmpty ? "Video.mov" : name
+    }
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { movie in
+            SentTransferredFile(movie.url)
+        } importing: { received in
+            let ext = received.file.pathExtension.isEmpty ? "mov" : received.file.pathExtension
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(ext)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: received.file, to: destination)
+            return Self(url: destination)
+        }
+    }
+}
 
 struct CameraImagePicker: UIViewControllerRepresentable {
     let onImagePicked: (UIImage) -> Void

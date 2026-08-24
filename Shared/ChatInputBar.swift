@@ -29,6 +29,9 @@ struct ChatInputBar: View {
     let onTakePhoto: () -> Void
     let onPickFile: () -> Void
     let onRemoveAttachment: (UUID) -> Void
+    var showsModelPicker: Bool = false
+    var modelLabel: String = ""
+    var onModelTap: () -> Void = {}
 
     @State private var rowHeight: CGFloat = 38
 
@@ -78,6 +81,10 @@ struct ChatInputBar: View {
                                 }
                                 return .ignored
                             }
+
+                        if showsModelPicker {
+                            modelChip
+                        }
 
                         if showsMicButton {
                             micButton
@@ -143,6 +150,29 @@ struct ChatInputBar: View {
         .accessibilityLabel("Add attachment")
         .disabled(isLoading)
         .zIndex(1)
+    }
+
+    @ViewBuilder
+    private var modelChip: some View {
+        Button(action: onModelTap) {
+            HStack(spacing: 3) {
+                Text(modelLabel)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(.secondary.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+        .accessibilityLabel("Model")
+        .accessibilityValue(modelLabel)
+        .accessibilityHint("Opens the model picker")
     }
 
     @ViewBuilder
@@ -225,22 +255,12 @@ private struct PendingAttachmentChip: View {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFill()
-        } else if ChatAttachmentTranscriber.isAudioAttachment(attachment) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.secondary.opacity(0.15))
-                Image(systemName: "waveform")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        } else if attachment.isVideo {
+            mediaSymbol("film")
+        } else if attachment.isAudio {
+            mediaSymbol("waveform")
         } else {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.secondary.opacity(0.15))
-                Image(systemName: "doc.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            mediaSymbol("doc.fill")
         }
     }
 }

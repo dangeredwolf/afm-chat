@@ -213,6 +213,8 @@ struct ToolCallInfo: Identifiable, Codable {
 
 enum ChatMessageAttachmentKind: String, Codable {
     case image
+    case video
+    case audio
     case file
 }
 
@@ -227,8 +229,23 @@ struct ChatMessageAttachment: Identifiable, Codable, Equatable {
         ChatAttachments.resolveURL(relativePath: relativePath)
     }
 
+    var resolvedKind: ChatMessageAttachmentKind {
+        if kind != .file {
+            return kind
+        }
+        return ChatAttachments.kind(mimeType: mimeType, fileURL: fileURL)
+    }
+
     var isModelSupportedImage: Bool {
-        kind == .image || ChatAttachments.isImageAttachment(mimeType: mimeType, fileURL: fileURL)
+        resolvedKind == .image
+    }
+
+    var isVideo: Bool {
+        resolvedKind == .video
+    }
+
+    var isAudio: Bool {
+        resolvedKind == .audio
     }
 
     init(id: UUID = UUID(), kind: ChatMessageAttachmentKind, label: String, relativePath: String, mimeType: String?) {
@@ -251,8 +268,19 @@ struct ChatMessageAttachment: Identifiable, Codable, Equatable {
         LLMAttachment(
             label: label,
             fileURL: fileURL,
-            isImage: isModelSupportedImage
+            mediaKind: resolvedKind.mediaKind
         )
+    }
+}
+
+extension ChatMessageAttachmentKind {
+    var mediaKind: LLMMediaKind {
+        switch self {
+        case .image: return .image
+        case .video: return .video
+        case .audio: return .audio
+        case .file: return .file
+        }
     }
 }
 
@@ -292,6 +320,7 @@ struct ChatMessage: Identifiable {
     var reasoningDuration: TimeInterval?
     var reasoningTokenCount: Int?
     var attachments: [ChatMessageAttachment]
+    var model: LLMModelChoice?
 
     init(
         content: String,
@@ -301,7 +330,8 @@ struct ChatMessage: Identifiable {
         reasoningContent: String? = nil,
         reasoningDuration: TimeInterval? = nil,
         reasoningTokenCount: Int? = nil,
-        attachments: [ChatMessageAttachment] = []
+        attachments: [ChatMessageAttachment] = [],
+        model: LLMModelChoice? = nil
     ) {
         self.id = UUID()
         self.content = content
@@ -313,6 +343,7 @@ struct ChatMessage: Identifiable {
         self.reasoningDuration = reasoningDuration
         self.reasoningTokenCount = reasoningTokenCount
         self.attachments = attachments
+        self.model = model
     }
 
     // Private initializer for decoding
@@ -326,7 +357,8 @@ struct ChatMessage: Identifiable {
         reasoningContent: String?,
         reasoningDuration: TimeInterval?,
         reasoningTokenCount: Int?,
-        attachments: [ChatMessageAttachment]
+        attachments: [ChatMessageAttachment],
+        model: LLMModelChoice?
     ) {
         self.id = id
         self.content = content
@@ -338,6 +370,7 @@ struct ChatMessage: Identifiable {
         self.reasoningDuration = reasoningDuration
         self.reasoningTokenCount = reasoningTokenCount
         self.attachments = attachments
+        self.model = model
     }
 
     var hasAttachments: Bool {
@@ -381,7 +414,8 @@ struct ChatMessage: Identifiable {
             reasoningContent: reasoningContent,
             reasoningDuration: reasoningDuration,
             reasoningTokenCount: reasoningTokenCount,
-            attachments: attachments
+            attachments: attachments,
+            model: model
         )
     }
 }
@@ -389,7 +423,7 @@ struct ChatMessage: Identifiable {
 // When adding tool calls, etc it broke loading old chats, so this lets us carefully load properties to make everything work
 extension ChatMessage: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, content, isUser, timestamp, error, toolCalls, reasoningContent, reasoningDuration, reasoningTokenCount, attachments
+        case id, content, isUser, timestamp, error, toolCalls, reasoningContent, reasoningDuration, reasoningTokenCount, attachments, model
     }
     
     init(from decoder: Decoder) throws {
@@ -408,6 +442,7 @@ extension ChatMessage: Codable {
         let reasoningDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .reasoningDuration)
         let reasoningTokenCount = try container.decodeIfPresent(Int.self, forKey: .reasoningTokenCount)
         let attachments = try container.decodeIfPresent([ChatMessageAttachment].self, forKey: .attachments) ?? []
+        let model = try container.decodeIfPresent(LLMModelChoice.self, forKey: .model)
         
         self.init(
             id: id,
@@ -419,7 +454,8 @@ extension ChatMessage: Codable {
             reasoningContent: reasoningContent,
             reasoningDuration: reasoningDuration,
             reasoningTokenCount: reasoningTokenCount,
-            attachments: attachments
+            attachments: attachments,
+            model: model
         )
     }
     
@@ -437,6 +473,7 @@ extension ChatMessage: Codable {
         if !attachments.isEmpty {
             try container.encode(attachments, forKey: .attachments)
         }
+        try container.encodeIfPresent(model, forKey: .model)
     }
 }
 
@@ -449,6 +486,8 @@ struct Chat: Identifiable, Codable {
     var temperature: Double
     var model: LLMModelChoice
     var reasoningLevel: LLMReasoningLevel
+    var thinkingEnabled: Bool
+    var thinkingBudgetTokens: Int?
     var toolsEnabled: Bool
     // Per-tool enablement (effective only when toolsEnabled == true)
     var toolCodeInterpreterEnabled: Bool
@@ -461,6 +500,8 @@ struct Chat: Identifiable, Codable {
          temperature: Double = 1.0,
          model: LLMModelChoice = .onDevice,
          reasoningLevel: LLMReasoningLevel = .moderate,
+         thinkingEnabled: Bool = true,
+         thinkingBudgetTokens: Int? = nil,
          toolsEnabled: Bool = true,
          toolCodeInterpreterEnabled: Bool = true,
          toolWebSearchEnabled: Bool = true,
@@ -474,6 +515,8 @@ struct Chat: Identifiable, Codable {
         self.temperature = temperature
         self.model = model
         self.reasoningLevel = reasoningLevel
+        self.thinkingEnabled = thinkingEnabled
+        self.thinkingBudgetTokens = thinkingBudgetTokens
         self.toolsEnabled = toolsEnabled
         self.toolCodeInterpreterEnabled = toolCodeInterpreterEnabled
         self.toolWebSearchEnabled = toolWebSearchEnabled
@@ -483,7 +526,8 @@ struct Chat: Identifiable, Codable {
     
     // Custom Codable implementation for backward compatibility
     private enum CodingKeys: String, CodingKey {
-        case id, title, messages, createdAt, systemPrompt, temperature, model, reasoningLevel, toolsEnabled,
+        case id, title, messages, createdAt, systemPrompt, temperature, model, reasoningLevel,
+             thinkingEnabled, thinkingBudgetTokens, toolsEnabled,
              toolCodeInterpreterEnabled, toolLocationEnabled, toolWebFetchEnabled, toolWebSearchEnabled,
              appendDateToSystemPrompt
     }
@@ -509,6 +553,12 @@ struct Chat: Identifiable, Codable {
         self.temperature = try container.decode(Double.self, forKey: .temperature)
         self.model = try container.decodeIfPresent(LLMModelChoice.self, forKey: .model) ?? .onDevice
         self.reasoningLevel = try container.decodeIfPresent(LLMReasoningLevel.self, forKey: .reasoningLevel) ?? .moderate
+        self.thinkingEnabled = try container.decodeIfPresent(Bool.self, forKey: .thinkingEnabled) ?? true
+        if let budget = try container.decodeIfPresent(Int.self, forKey: .thinkingBudgetTokens), budget > 0 {
+            self.thinkingBudgetTokens = budget
+        } else {
+            self.thinkingBudgetTokens = nil
+        }
         self.toolsEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolsEnabled) ?? false
         self.toolCodeInterpreterEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolCodeInterpreterEnabled) ?? true
         _ = try container.decodeIfPresent(Bool.self, forKey: .toolLocationEnabled)
@@ -527,6 +577,8 @@ struct Chat: Identifiable, Codable {
         try container.encode(temperature, forKey: .temperature)
         try container.encode(model, forKey: .model)
         try container.encode(reasoningLevel, forKey: .reasoningLevel)
+        try container.encode(thinkingEnabled, forKey: .thinkingEnabled)
+        try container.encodeIfPresent(thinkingBudgetTokens, forKey: .thinkingBudgetTokens)
         try container.encode(toolsEnabled, forKey: .toolsEnabled)
         try container.encode(toolCodeInterpreterEnabled, forKey: .toolCodeInterpreterEnabled)
         try container.encode(toolWebFetchEnabled, forKey: .toolWebFetchEnabled)

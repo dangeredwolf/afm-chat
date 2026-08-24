@@ -10,11 +10,19 @@ import MarkdownUI
 import UIKit
 
 struct ReasoningView: View {
+    let reasoningContent: String?
     let reasoningDuration: TimeInterval?
     let reasoningTokenCount: Int?
     let isStreaming: Bool
     let isThinkingActive: Bool
+    let maxWidth: CGFloat
     @State private var thinkingStartDate: Date?
+    @State private var isExpanded = false
+
+    private var hasExpandableContent: Bool {
+        guard let reasoningContent else { return false }
+        return !reasoningContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     private func formatThinkingDuration(_ seconds: TimeInterval) -> String {
         if seconds < 10 {
@@ -45,30 +53,62 @@ struct ReasoningView: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            if isStreaming {
-                ProgressView()
-                    .scaleEffect(0.7)
-                    .frame(width: 16, height: 16)
-            } else {
-                Image(systemName: "brain.head.profile")
-                    .foregroundColor(.purple)
-                    .frame(width: 16, height: 16)
-            }
-
-            Group {
-                if isThinkingActive {
-                    TimelineView(.periodic(from: .now, by: 0.1)) { context in
-                        reasoningHeader(durationLabel: durationLabel(at: context.date))
-                    }
-                } else {
-                    reasoningHeader(durationLabel: durationLabel(at: .now))
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                guard hasExpandableContent else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
                 }
+            } label: {
+                HStack(spacing: 8) {
+                    if isStreaming && isThinkingActive {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .frame(width: 16, height: 16)
+                    } else {
+                        Image(systemName: "brain.head.profile")
+                            .foregroundColor(.purple)
+                            .frame(width: 16, height: 16)
+                    }
+
+                    Group {
+                        if isThinkingActive {
+                            TimelineView(.periodic(from: .now, by: 0.1)) { context in
+                                reasoningHeader(durationLabel: durationLabel(at: context.date))
+                            }
+                        } else {
+                            reasoningHeader(durationLabel: durationLabel(at: .now))
+                        }
+                    }
+
+                    if hasExpandableContent {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
+            .disabled(!hasExpandableContent)
+
+            if isExpanded, hasExpandableContent, let reasoningContent {
+                Divider()
+                    .padding(.horizontal, 12)
+
+                Markdown(reasoningContent)
+                    .markdownTextStyle(\.text) {
+                        FontSize(.em(0.85))
+                        ForegroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .frame(maxWidth: isExpanded && hasExpandableContent ? maxWidth : nil, alignment: .leading)
+        .fixedSize(horizontal: !(isExpanded && hasExpandableContent), vertical: false)
         .background(Color.purple.opacity(0.05))
         .cornerRadius(8)
         .overlay(
@@ -77,12 +117,23 @@ struct ReasoningView: View {
         )
         .onAppear {
             syncThinkingStartDate()
+            if isThinkingActive && hasExpandableContent {
+                isExpanded = true
+            }
         }
-        .onChange(of: isThinkingActive) { _, _ in
+        .onChange(of: isThinkingActive) { _, active in
             syncThinkingStartDate()
+            if active && hasExpandableContent {
+                isExpanded = true
+            }
         }
         .onChange(of: reasoningDuration) { _, _ in
             syncThinkingStartDate()
+        }
+        .onChange(of: hasExpandableContent) { _, hasContent in
+            if isThinkingActive && hasContent {
+                isExpanded = true
+            }
         }
     }
 
@@ -94,7 +145,7 @@ struct ReasoningView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
 
-            if isStreaming {
+            if isThinkingActive {
                 Text("...")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -372,10 +423,20 @@ private struct MessageFileAttachmentView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.secondary.opacity(0.15))
-            Image(systemName: "doc.fill")
+            Image(systemName: fileSymbolName)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var fileSymbolName: String {
+        if attachment.isVideo {
+            return "film"
+        }
+        if attachment.isAudio {
+            return "waveform"
+        }
+        return "doc.fill"
     }
 }
 
@@ -437,6 +498,7 @@ private struct MessageFileAttachmentsView: View {
 struct ChatBubble: View {
     let message: ChatMessage
     let isStreaming: Bool
+    var generationPhase: ChatGenerationPhase = .idle
     let onEdit: ((UUID) -> Void)?
     let onCopy: ((UUID) -> Void)?
     let onRetry: ((UUID) -> Void)?
@@ -444,12 +506,14 @@ struct ChatBubble: View {
     init(
         message: ChatMessage,
         isStreaming: Bool = false,
+        generationPhase: ChatGenerationPhase = .idle,
         onEdit: ((UUID) -> Void)? = nil,
         onCopy: ((UUID) -> Void)? = nil,
         onRetry: ((UUID) -> Void)? = nil
     ) {
         self.message = message
         self.isStreaming = isStreaming
+        self.generationPhase = generationPhase
         self.onEdit = onEdit
         self.onCopy = onCopy
         self.onRetry = onRetry
@@ -640,11 +704,13 @@ struct ChatBubble: View {
                 if !message.isUser {
                     if message.hasReasoningContent {
                         ReasoningView(
+                            reasoningContent: message.reasoningContent,
                             reasoningDuration: message.reasoningDuration,
                             reasoningTokenCount: message.reasoningTokenCount,
                             isStreaming: isStreaming,
                             isThinkingActive: isStreaming
-                                && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                            maxWidth: maxBubbleWidth
                         )
                         .frame(maxWidth: maxBubbleWidth, alignment: .leading)
                     }
@@ -704,6 +770,9 @@ struct ChatBubble: View {
                                 }
                             }
                         }
+                } else if isStreaming && !message.isUser && !message.hasReasoningContent && !message.hasToolCalls {
+                    StreamingStatusBubble(phase: generationPhase)
+                        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
                 }
 
                 Text(message.timestamp, style: .time)
@@ -716,5 +785,39 @@ struct ChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+private struct StreamingStatusBubble: View {
+    let phase: ChatGenerationPhase
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .scaleEffect(0.75)
+                .frame(width: 16, height: 16)
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.gray.opacity(0.2))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityLabel(label)
+    }
+
+    private var label: String {
+        switch phase {
+        case .loadingModel(let name, let fraction):
+            if let fraction, fraction > 0, fraction < 1 {
+                return "Loading \(name)… \(Int((fraction * 100).rounded()))%"
+            }
+            return "Loading \(name)…"
+        case .compiling(let name):
+            return "Preparing \(name)…"
+        case .generating, .idle:
+            return "Generating…"
+        }
     }
 }

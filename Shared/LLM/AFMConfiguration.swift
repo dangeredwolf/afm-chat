@@ -211,13 +211,13 @@ enum AFMSessionPipeline {
 @available(iOS 27, *)
 enum AFMPromptBuilder {
     static func makePrompt(from llmPrompt: LLMPrompt) -> Prompt {
-        let images = llmPrompt.attachments.filter(\.isImage)
+        let images = llmPrompt.attachments.filter { $0.mediaKind == .image }
         let imageParts = images.map { Attachment(imageURL: $0.fileURL).label($0.label) }
         let trimmed = llmPrompt.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let unsupported = llmPrompt.attachments.filter { !$0.isImage }.map(\.label)
+        let unsupported = llmPrompt.attachments.filter { $0.mediaKind == .file }.map(\.label)
         let fileNote = unsupported.isEmpty
             ? nil
-            : "The user attached these files: " + unsupported.joined(separator: ", ") + ". Use the Read Attachment tool to read or transcribe their contents before answering questions about them."
+            : "The user attached these files: " + unsupported.joined(separator: ", ") + ". Use the Read Attachment tool to read their contents before answering questions about them."
 
         if imageParts.isEmpty {
             if let fileNote {
@@ -259,13 +259,13 @@ enum AFMPromptBuilder {
                     label: attachment.label
                 )
                 segments.append(.attachment(segment))
-            } else {
+            } else if attachment.mediaKind == .file {
                 unsupportedFileLabels.append(attachment.label)
             }
         }
 
         if !unsupportedFileLabels.isEmpty {
-            let note = "The user attached these files: " + unsupportedFileLabels.joined(separator: ", ") + ". Use the Read Attachment tool to read or transcribe their contents before answering questions about them."
+            let note = "The user attached these files: " + unsupportedFileLabels.joined(separator: ", ") + ". Use the Read Attachment tool to read their contents before answering questions about them."
             segments.append(.text(Transcript.TextSegment(content: note)))
         }
 

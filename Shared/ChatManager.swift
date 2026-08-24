@@ -22,6 +22,7 @@ class ChatManager: ObservableObject {
     @Published var inputText: String = ""
     @Published var pendingAttachments: [ChatMessageAttachment] = []
     @Published var isLoading: Bool = false
+    @Published var generationPhase: ChatGenerationPhase = .idle
     @Published var editingMessageId: UUID? = nil
     @Published var savedMessagesForEdit: [ChatMessage] = []
     @Published var contextUsage: LLMContextUsage?
@@ -126,8 +127,10 @@ class ChatManager: ObservableObject {
             }
         }
         
-        let history = messagesToInclude.map { message in
-            LLMHistoryEntry(
+        let capabilities = AttachmentMediaSupport.capabilities(for: chat?.model ?? .onDevice)
+        let includeFileNames = chat?.model.mlxModelID != nil
+        let history = messagesToInclude.map { message -> LLMHistoryEntry in
+            let entry = LLMHistoryEntry(
                 isUser: message.isUser,
                 content: message.content,
                 attachments: message.isUser ? message.attachments.map { $0.toLLMAttachment() } : [],
@@ -140,7 +143,13 @@ class ChatManager: ObservableObject {
                         result: toolCall.result,
                         error: toolCall.error
                     )
-                }
+                },
+                reasoningContent: message.isUser ? nil : message.reasoningContent
+            )
+            return AttachmentMediaSupport.preparedHistoryEntry(
+                entry,
+                capabilities: capabilities,
+                includeFileNames: includeFileNames
             )
         }
 
@@ -159,13 +168,13 @@ class ChatManager: ObservableObject {
         }
 
         let fileAttachments = (messagesToInclude.flatMap(\.attachments) + additionalFileAttachments)
-            .filter { !$0.isModelSupportedImage }
+            .filter { !$0.isModelSupportedImage && !$0.isAudio && !$0.isVideo }
 
         if !fileAttachments.isEmpty {
             let registry = AttachmentRegistry(attachments: fileAttachments)
             toolList.append(AnyLLMTool(
                 name: "Read Attachment",
-                description: "Read or transcribe text content from a user-attached file, including documents, code, PDFs, and audio recordings.",
+                description: "Read text content from a user-attached file, including documents, code, and PDFs.",
                 providerPayloads: ["afmTool": ReadAttachmentTool(registry: registry)]
             ))
         }
@@ -180,6 +189,8 @@ class ChatManager: ObservableObject {
                 model: chat?.model ?? .onDevice,
                 temperature: chat?.temperature ?? 1.0,
                 reasoningLevel: chat?.reasoningLevel ?? .moderate,
+                thinkingEnabled: chat?.thinkingEnabled ?? true,
+                thinkingBudgetTokens: chat?.thinkingBudgetTokens,
                 history: history,
                 guardrails: .permissiveContentTransformations
             )
@@ -236,6 +247,14 @@ class ChatManager: ObservableObject {
         return currentChat?.reasoningLevel ?? .moderate
     }
 
+    var currentThinkingEnabled: Bool {
+        return currentChat?.thinkingEnabled ?? true
+    }
+
+    var currentThinkingBudgetTokens: Int? {
+        return currentChat?.thinkingBudgetTokens
+    }
+
     var currentModel: LLMModelChoice {
         return currentChat?.model ?? .onDevice
     }
@@ -278,6 +297,9 @@ class ChatManager: ObservableObject {
         let defaultReasoningLevel = LLMReasoningLevel(
             rawValue: UserDefaults.standard.string(forKey: "reasoningLevel") ?? LLMReasoningLevel.moderate.rawValue
         ) ?? .moderate
+        let defaultThinkingEnabled = UserDefaults.standard.object(forKey: "thinkingEnabled") as? Bool ?? true
+        let storedBudget = UserDefaults.standard.object(forKey: "thinkingBudgetTokens") as? Int
+        let defaultThinkingBudget = (storedBudget ?? 0) > 0 ? storedBudget : nil
         let defaultToolsEnabled = UserDefaults.standard.object(forKey: "toolsEnabled") as? Bool ?? false
         let codeEnabled = UserDefaults.standard.object(forKey: "toolCodeInterpreterEnabled") as? Bool ?? true
         let webSearchEnabled = UserDefaults.standard.object(forKey: "toolWebSearchEnabled") as? Bool ?? true
@@ -288,6 +310,8 @@ class ChatManager: ObservableObject {
                            temperature: defaultTemperature,
                            model: defaultModel,
                            reasoningLevel: defaultReasoningLevel,
+                           thinkingEnabled: defaultThinkingEnabled,
+                           thinkingBudgetTokens: defaultThinkingBudget,
                            toolsEnabled: defaultToolsEnabled,
                            toolCodeInterpreterEnabled: codeEnabled,
                            toolWebSearchEnabled: webSearchEnabled,
@@ -334,13 +358,17 @@ class ChatManager: ObservableObject {
         reasoningLevel: LLMReasoningLevel,
         toolsEnabled: Bool,
         appendDateToSystemPrompt: Bool,
-        perTools: (code: Bool, webSearch: Bool, webFetch: Bool)? = nil
+        perTools: (code: Bool, webSearch: Bool, webFetch: Bool)? = nil,
+        thinkingEnabled: Bool,
+        thinkingBudgetTokens: Int?
     ) {
         guard !isLoading, var chat = currentChat else { return }
         chat.systemPrompt = systemPrompt
         chat.temperature = temperature
         chat.model = model
         chat.reasoningLevel = reasoningLevel
+        chat.thinkingEnabled = thinkingEnabled
+        chat.thinkingBudgetTokens = thinkingBudgetTokens
         chat.toolsEnabled = toolsEnabled
         chat.appendDateToSystemPrompt = appendDateToSystemPrompt
         if let perTools = perTools {
@@ -359,6 +387,12 @@ class ChatManager: ObservableObject {
         UserDefaults.standard.set(temperature, forKey: "temperature")
         UserDefaults.standard.set(model.rawValue, forKey: "model")
         UserDefaults.standard.set(reasoningLevel.rawValue, forKey: "reasoningLevel")
+        UserDefaults.standard.set(thinkingEnabled, forKey: "thinkingEnabled")
+        if let thinkingBudgetTokens, thinkingBudgetTokens > 0 {
+            UserDefaults.standard.set(thinkingBudgetTokens, forKey: "thinkingBudgetTokens")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "thinkingBudgetTokens")
+        }
         UserDefaults.standard.set(toolsEnabled, forKey: "toolsEnabled")
         UserDefaults.standard.set(appendDateToSystemPrompt, forKey: "appendDateToSystemPrompt")
         if let perTools = perTools {
@@ -368,6 +402,44 @@ class ChatManager: ObservableObject {
         }
 
         saveChats()
+        prepareCurrentModelInBackground()
+    }
+
+    func selectModel(_ model: LLMModelChoice) {
+        updateChatSettings(
+            systemPrompt: currentSystemPrompt,
+            temperature: currentTemperature,
+            model: model,
+            reasoningLevel: currentReasoningLevel,
+            toolsEnabled: currentToolsEnabled,
+            appendDateToSystemPrompt: currentAppendDateToSystemPrompt,
+            thinkingEnabled: currentThinkingEnabled,
+            thinkingBudgetTokens: currentThinkingBudgetTokens
+        )
+    }
+
+    func resetChats(usingDeletedModel modelID: String) {
+        let deleted = LLMModelChoice.mlx(id: modelID)
+        var didChange = false
+
+        if currentModel == deleted {
+            selectModel(.onDevice)
+        }
+
+        for index in chats.indices where chats[index].model == deleted {
+            chats[index].model = .onDevice
+            sessions.removeValue(forKey: chats[index].id)
+            didChange = true
+        }
+        if var tempChat = temporaryChat, tempChat.model == deleted {
+            tempChat.model = .onDevice
+            temporaryChat = tempChat
+            sessions.removeValue(forKey: tempChat.id)
+            didChange = true
+        }
+        if didChange {
+            saveChats()
+        }
     }
     
     func sendMessage() {
@@ -389,7 +461,8 @@ class ChatManager: ObservableObject {
         let userChatMessage = ChatMessage(
             content: userMessage,
             isUser: true,
-            attachments: attachmentsToSend
+            attachments: attachmentsToSend,
+            model: chat.model
         )
         chat.messages.append(userChatMessage)
         
@@ -411,7 +484,8 @@ class ChatManager: ObservableObject {
         let aiMessage = ChatMessage(
             content: "",
             isUser: false,
-            reasoningDuration: AFMModelCatalog.supportsReasoning(chat.model) ? 0 : nil
+            reasoningDuration: AFMModelCatalog.supportsReasoning(chat.model) ? 0 : nil,
+            model: chat.model
         )
         chat.messages.append(aiMessage)
 
@@ -427,6 +501,7 @@ class ChatManager: ObservableObject {
         pendingAttachments = []
         editingMessageId = nil
         isLoading = true
+        generationPhase = initialGenerationPhase(for: chat.model)
 
         // Recreate session before streaming so tools (e.g. Read Attachment) and transcript
         // reflect the outgoing message. History excludes the new user/assistant placeholders;
@@ -446,7 +521,7 @@ class ChatManager: ObservableObject {
             attachments: attachmentsToSend.map { $0.toLLMAttachment() }
         )
         Task {
-            await self.processLLMResponse(prompt: llmPrompt, chat: chat)
+            await self.prepareThenRespond(prompt: llmPrompt, chat: chat)
         }
     }
 
@@ -454,14 +529,18 @@ class ChatManager: ObservableObject {
         pendingAttachments = pendingAttachments.filter { $0.id != attachmentId }
     }
 
-    func addPendingAttachment(from sourceURL: URL, label: String, kind: ChatMessageAttachmentKind) {
+    func addPendingAttachment(from sourceURL: URL, label: String, kind _: ChatMessageAttachmentKind) {
         guard let chatId = currentChatId else {
             print("Failed to import attachment: no active chat")
             return
         }
         do {
             let storedURL = try ChatAttachments.importFile(from: sourceURL, chatId: chatId, suggestedName: label)
-            let attachment = ChatMessageAttachment(fileURL: storedURL, chatId: chatId, label: label, kind: kind)
+            let resolvedKind = ChatAttachments.kind(
+                mimeType: ChatAttachments.mimeType(for: storedURL),
+                fileURL: storedURL
+            )
+            let attachment = ChatMessageAttachment(fileURL: storedURL, chatId: chatId, label: label, kind: resolvedKind)
             pendingAttachments = pendingAttachments + [attachment]
         } catch {
             print("Failed to import attachment: \(error)")
@@ -580,13 +659,15 @@ class ChatManager: ObservableObject {
         let aiMessage = ChatMessage(
             content: "",
             isUser: false,
-            reasoningDuration: AFMModelCatalog.supportsReasoning(chat.model) ? 0 : nil
+            reasoningDuration: AFMModelCatalog.supportsReasoning(chat.model) ? 0 : nil,
+            model: chat.model
         )
         chat.messages.append(aiMessage)
         
         // Update the chat
         currentChat = chat
         isLoading = true
+        generationPhase = initialGenerationPhase(for: chat.model)
 
         if let chatId = currentChatId {
             let newSession = createSessionForChat(
@@ -599,7 +680,7 @@ class ChatManager: ObservableObject {
         
         // Retry the request with tool call tracking
         Task {
-            await self.processLLMResponse(prompt: llmPrompt, chat: chat)
+            await self.prepareThenRespond(prompt: llmPrompt, chat: chat)
         }
     }
     
@@ -636,6 +717,7 @@ class ChatManager: ObservableObject {
         sessions[chatId] = newSession
         refreshContextWindowMetadata()
         refreshContextUsage()
+        prepareCurrentModelInBackground()
     }
     
     // Force recreation of the current session (useful when settings change)
@@ -956,6 +1038,7 @@ class ChatManager: ObservableObject {
             
             await MainActor.run {
                 self.isLoading = false
+                self.generationPhase = .idle
                 self.refreshContextUsage()
                 self.saveChats()
             }
@@ -972,20 +1055,137 @@ class ChatManager: ObservableObject {
                             failedToolCalls[i].error = error.localizedDescription
                         }
                         
+                        let existingModel = currentChat.messages[lastIndex].model ?? currentChat.model
                         currentChat.messages[lastIndex] = ChatMessage(
                             content: chatError.description,
                             isUser: false,
                             error: chatError,
-                            toolCalls: failedToolCalls
+                            toolCalls: failedToolCalls,
+                            model: existingModel
                         )
                         self.currentChat = currentChat
                     }
                 }
                 self.isLoading = false
+                self.generationPhase = .idle
                 self.refreshContextUsage()
                 self.saveChats()
             }
         }
+    }
+
+    private func initialGenerationPhase(for model: LLMModelChoice) -> ChatGenerationPhase {
+        #if AFM_MLX
+        if #available(iOS 27, *), case .mlx(let id) = model, !MLXRuntime.shared.isWarmed(id) {
+            return .loadingModel(name: model.displayName, fraction: nil)
+        }
+        #endif
+        return .generating
+    }
+
+    private func prepareCurrentModelInBackground() {
+        #if AFM_MLX
+        guard #available(iOS 27, *) else { return }
+        let keepID = currentModel.mlxModelID
+        let pipelineTag = keepID.flatMap { DownloadedModelStore.pipelineTag(for: $0) }
+        releaseSessions(keepingMLX: keepID)
+        MLXRuntime.shared.prepareInBackground(
+            id: keepID,
+            pipelineTag: pipelineTag,
+            displayName: currentModel.displayName
+        )
+        #endif
+    }
+
+    private func releaseSessions(keepingMLX keepID: String?) {
+        for chatId in Array(sessions.keys) {
+            guard case .mlx(let id) = getChatById(chatId)?.model, id != keepID else { continue }
+            sessions.removeValue(forKey: chatId)
+        }
+    }
+
+    private func prepareThenRespond(prompt: LLMPrompt, chat: Chat) async {
+        do {
+            try await prepareModelIfNeeded(chat.model)
+        } catch {
+            if error is CancellationError {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.generationPhase = .idle
+                }
+                return
+            }
+            await MainActor.run {
+                let chatError = ChatError.fromError(error)
+                if var currentChat = self.currentChat,
+                   let lastIndex = currentChat.messages.lastIndex(where: { !$0.isUser }) {
+                    let existingModel = currentChat.messages[lastIndex].model ?? currentChat.model
+                    currentChat.messages[lastIndex] = ChatMessage(
+                        content: chatError.description,
+                        isUser: false,
+                        error: chatError,
+                        model: existingModel
+                    )
+                    self.currentChat = currentChat
+                }
+                self.isLoading = false
+                self.generationPhase = .idle
+                self.saveChats()
+            }
+            return
+        }
+
+        await MainActor.run {
+            self.generationPhase = .generating
+        }
+        let capabilities = AttachmentMediaSupport.capabilities(for: chat.model)
+        let includeFileNames = chat.model.mlxModelID != nil
+        let historyAttachments = chat.messages
+            .filter(\.isUser)
+            .flatMap(\.attachments)
+            .map { $0.toLLMAttachment() }
+        await AttachmentMediaSupport.ensureTranscripts(
+            attachments: prompt.attachments + historyAttachments,
+            capabilities: capabilities
+        )
+        let preparedPrompt = AttachmentMediaSupport.preparePrompt(
+            prompt,
+            capabilities: capabilities,
+            includeFileNames: includeFileNames
+        )
+        if let chatId = currentChatId {
+            let upToMessage = chat.messages.last(where: \.isUser)?.id
+            let outgoingAttachments = chat.messages.last(where: \.isUser)?.attachments ?? []
+            await MainActor.run {
+                let newSession = self.createSessionForChat(
+                    chatId: chatId,
+                    upToMessage: upToMessage,
+                    additionalFileAttachments: outgoingAttachments
+                )
+                self.sessions[chatId] = newSession
+            }
+        }
+        await processLLMResponse(prompt: preparedPrompt, chat: chat)
+    }
+
+    private func prepareModelIfNeeded(_ model: LLMModelChoice) async throws {
+        #if AFM_MLX
+        guard #available(iOS 27, *) else { return }
+        let keepID = model.mlxModelID
+        let pipelineTag = keepID.flatMap { DownloadedModelStore.pipelineTag(for: $0) }
+        releaseSessions(keepingMLX: keepID)
+        try await MLXRuntime.shared.activate(
+            id: keepID,
+            pipelineTag: pipelineTag,
+            displayName: model.displayName,
+            onPhase: { [weak self] phase in
+                Task { @MainActor in
+                    guard let self, self.isLoading else { return }
+                    self.generationPhase = phase
+                }
+            }
+        )
+        #endif
     }
 
     private func updateInFlightAssistantMessage(

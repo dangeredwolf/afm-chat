@@ -26,16 +26,59 @@ public enum LLMReasoningLevel: String, Codable, CaseIterable, Identifiable, Send
     }
 }
 
-public enum LLMModelChoice: String, Codable, CaseIterable, Identifiable, Sendable {
+public enum LLMThinkingBudget {
+    public static let presets = [512, 1024, 2048, 4096, 8192]
+}
+
+public enum LLMModelChoice: Hashable, Codable, Identifiable, Sendable {
     case onDevice
     case privateCloudCompute
+    case mlx(id: String)
 
     public var id: String { rawValue }
+
+    public var rawValue: String {
+        switch self {
+        case .onDevice: return "onDevice"
+        case .privateCloudCompute: return "privateCloudCompute"
+        case .mlx(let id): return "mlx:\(id)"
+        }
+    }
+
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "onDevice":
+            self = .onDevice
+        case "privateCloudCompute":
+            self = .privateCloudCompute
+        case let value where value.hasPrefix("mlx:"):
+            let id = String(value.dropFirst(4))
+            guard !id.isEmpty else { return nil }
+            self = .mlx(id: id)
+        default:
+            return nil
+        }
+    }
+
+    public var mlxModelID: String? {
+        if case .mlx(let id) = self { return id }
+        return nil
+    }
 
     public var displayName: String {
         switch self {
         case .onDevice: return "On-Device"
         case .privateCloudCompute: return "Private Cloud Compute"
+        case .mlx(let id):
+            return id.split(separator: "/").last.map(String.init) ?? id
+        }
+    }
+
+    public var composerLabel: String {
+        switch self {
+        case .onDevice: return "On-Device"
+        case .privateCloudCompute: return "PCC"
+        case .mlx: return displayName
         }
     }
 
@@ -45,7 +88,26 @@ public enum LLMModelChoice: String, Codable, CaseIterable, Identifiable, Sendabl
             return "Runs locally on your device. Fast and private, with a smaller context window."
         case .privateCloudCompute:
             return "Uses Apple's Private Cloud Compute for stronger reasoning and a larger context window."
+        case .mlx(let id):
+            return "Open-source MLX model from Hugging Face (\(id)). Runs locally on your device."
         }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        guard let decoded = LLMModelChoice(rawValue: value) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown model choice: \(value)"
+            )
+        }
+        self = decoded
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }
 
@@ -116,15 +178,64 @@ public struct LLMHistoryToolCall: Sendable {
     }
 }
 
+public enum LLMMediaKind: String, Sendable, Equatable {
+    case image
+    case video
+    case audio
+    case file
+}
+
+public struct LLMMediaCapabilities: Sendable, Equatable {
+    public var vision: Bool
+    public var video: Bool
+    public var audio: Bool
+    public var singleVideoOnly: Bool
+    public var singleMediaType: Bool
+
+    public init(
+        vision: Bool,
+        video: Bool,
+        audio: Bool,
+        singleVideoOnly: Bool = false,
+        singleMediaType: Bool = false
+    ) {
+        self.vision = vision
+        self.video = video
+        self.audio = audio
+        self.singleVideoOnly = singleVideoOnly
+        self.singleMediaType = singleMediaType
+    }
+
+    public static let apple = LLMMediaCapabilities(
+        vision: true,
+        video: false,
+        audio: false
+    )
+
+    public static let none = LLMMediaCapabilities(
+        vision: false,
+        video: false,
+        audio: false
+    )
+}
+
 public struct LLMAttachment: Sendable {
     public let label: String
     public let fileURL: URL
-    public let isImage: Bool
+    public let mediaKind: LLMMediaKind
 
-    public init(label: String, fileURL: URL, isImage: Bool) {
+    public var isImage: Bool { mediaKind == .image }
+    public var isVideo: Bool { mediaKind == .video }
+    public var isAudio: Bool { mediaKind == .audio }
+
+    public init(label: String, fileURL: URL, mediaKind: LLMMediaKind) {
         self.label = label
         self.fileURL = fileURL
-        self.isImage = isImage
+        self.mediaKind = mediaKind
+    }
+
+    public init(label: String, fileURL: URL, isImage: Bool) {
+        self.init(label: label, fileURL: fileURL, mediaKind: isImage ? .image : .file)
     }
 }
 
@@ -147,17 +258,20 @@ public struct LLMHistoryEntry: Sendable {
     public let content: String
     public let attachments: [LLMAttachment]
     public let toolCalls: [LLMHistoryToolCall]
+    public let reasoningContent: String?
 
     public init(
         isUser: Bool,
         content: String,
         attachments: [LLMAttachment] = [],
-        toolCalls: [LLMHistoryToolCall] = []
+        toolCalls: [LLMHistoryToolCall] = [],
+        reasoningContent: String? = nil
     ) {
         self.isUser = isUser
         self.content = content
         self.attachments = attachments
         self.toolCalls = toolCalls
+        self.reasoningContent = reasoningContent
     }
 }
 
@@ -170,6 +284,8 @@ public struct LLMSessionConfiguration: Sendable {
     public var model: LLMModelChoice
     public var temperature: Double
     public var reasoningLevel: LLMReasoningLevel
+    public var thinkingEnabled: Bool
+    public var thinkingBudgetTokens: Int?
     public var history: [LLMHistoryEntry]
     public var guardrails: LLMGuardrailsMode
 
@@ -177,12 +293,16 @@ public struct LLMSessionConfiguration: Sendable {
         model: LLMModelChoice = .onDevice,
         temperature: Double = 1.0,
         reasoningLevel: LLMReasoningLevel = .moderate,
+        thinkingEnabled: Bool = true,
+        thinkingBudgetTokens: Int? = nil,
         history: [LLMHistoryEntry] = [],
         guardrails: LLMGuardrailsMode = .default
     ) {
         self.model = model
         self.temperature = temperature
         self.reasoningLevel = reasoningLevel
+        self.thinkingEnabled = thinkingEnabled
+        self.thinkingBudgetTokens = thinkingBudgetTokens
         self.history = history
         self.guardrails = guardrails
     }

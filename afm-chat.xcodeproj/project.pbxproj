@@ -68,6 +68,30 @@
 		36F5E5222E50E022000032 /* readability-bridge.js in Resources */ = {isa = PBXBuildFile; fileRef = 36F5E5042E50E004000017 /* readability-bridge.js */; };
 		36F5E5232E50E023000033 /* readability.js in Resources */ = {isa = PBXBuildFile; fileRef = 36F5E5032E50E003000016 /* readability.js */; };
 		36F5E5242E50E024000034 /* readability-bridge.js in Resources */ = {isa = PBXBuildFile; fileRef = 36F5E5042E50E004000017 /* readability-bridge.js */; };
+		36F6A1112E50F011000111 /* MLXModelFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1012E50F001000101 /* MLXModelFactory.swift */; };
+		36F6A1182E50F018000118 /* MLXRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1082E50F008000108 /* MLXRuntime.swift */; };
+		36F6A1192E50F019000119 /* MLXTokenStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1092E50F009000109 /* MLXTokenStream.swift */; };
+		36F6A1122E50F012000112 /* HuggingFaceModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1022E50F002000102 /* HuggingFaceModelCatalog.swift */; };
+		36F6A1132E50F013000113 /* DownloadedModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1032E50F003000103 /* DownloadedModelStore.swift */; };
+		36F6A1142E50F014000114 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1042E50F004000104 /* ModelPickerView.swift */; };
+		36F6A1152E50F015000115 /* AddModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1052E50F005000105 /* AddModelView.swift */; };
+		36F6A1162E50F016000116 /* ModelDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1062E50F006000106 /* ModelDownloadManager.swift */; };
+		36F6A1172E50F017000117 /* ModelLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1072E50F007000107 /* ModelLab.swift */; };
+		36F6A1212E50F021000121 /* MLXModelFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1012E50F001000101 /* MLXModelFactory.swift */; };
+		36F6A1282E50F028000128 /* MLXRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1082E50F008000108 /* MLXRuntime.swift */; };
+		36F6A1292E50F029000129 /* MLXTokenStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1092E50F009000109 /* MLXTokenStream.swift */; };
+		36F6A1222E50F022000122 /* HuggingFaceModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1022E50F002000102 /* HuggingFaceModelCatalog.swift */; };
+		36F6A1232E50F023000123 /* DownloadedModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1032E50F003000103 /* DownloadedModelStore.swift */; };
+		36F6A1242E50F024000124 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1042E50F004000104 /* ModelPickerView.swift */; };
+		36F6A1252E50F025000125 /* AddModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1052E50F005000105 /* AddModelView.swift */; };
+		36F6A1262E50F026000126 /* ModelDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1062E50F006000106 /* ModelDownloadManager.swift */; };
+		36F6A1272E50F027000127 /* ModelLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1072E50F007000107 /* ModelLab.swift */; };
+		36F6A2202E50F120000220 /* MLXFoundationModels in Frameworks */ = {isa = PBXBuildFile; productRef = 36F6A2102E50F110000210 /* MLXFoundationModels */; };
+		36F6A2212E50F121000221 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 36F6A2112E50F111000211 /* MLXLLM */; };
+		36F6A2222E50F122000222 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = 36F6A2122E50F112000212 /* MLXVLM */; };
+		36F6A2232E50F123000223 /* MLXHuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 36F6A2132E50F113000213 /* MLXHuggingFace */; };
+		36F6A2242E50F124000224 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 36F6A2142E50F114000214 /* HuggingFace */; };
+		36F6A2252E50F125000225 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = 36F6A2152E50F115000215 /* Tokenizers */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -124,6 +148,15 @@
 		36F5E5022E50E002000015 /* WebFetchTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFetchTool.swift; sourceTree = "<group>"; };
 		36F5E5032E50E003000016 /* readability.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = readability.js; sourceTree = "<group>"; };
 		36F5E5042E50E004000017 /* readability-bridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "readability-bridge.js"; sourceTree = "<group>"; };
+		36F6A1012E50F001000101 /* MLXModelFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXModelFactory.swift; sourceTree = "<group>"; };
+		36F6A1082E50F008000108 /* MLXRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXRuntime.swift; sourceTree = "<group>"; };
+		36F6A1092E50F009000109 /* MLXTokenStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXTokenStream.swift; sourceTree = "<group>"; };
+		36F6A1022E50F002000102 /* HuggingFaceModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuggingFaceModelCatalog.swift; sourceTree = "<group>"; };
+		36F6A1032E50F003000103 /* DownloadedModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadedModelStore.swift; sourceTree = "<group>"; };
+		36F6A1042E50F004000104 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
+		36F6A1052E50F005000105 /* AddModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddModelView.swift; sourceTree = "<group>"; };
+		36F6A1062E50F006000106 /* ModelDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadManager.swift; sourceTree = "<group>"; };
+		36F6A1072E50F007000107 /* ModelLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -167,6 +200,12 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				3658A65C2DF9ED3E00254350 /* MarkdownUI in Frameworks */,
+				36F6A2202E50F120000220 /* MLXFoundationModels in Frameworks */,
+				36F6A2212E50F121000221 /* MLXLLM in Frameworks */,
+				36F6A2222E50F122000222 /* MLXVLM in Frameworks */,
+				36F6A2232E50F123000223 /* MLXHuggingFace in Frameworks */,
+				36F6A2242E50F124000224 /* HuggingFace in Frameworks */,
+				36F6A2252E50F125000225 /* Tokenizers in Frameworks */,
 			);
 		};
 		36D70A012DF9482B006889A7 /* Frameworks */ = {
@@ -202,6 +241,8 @@
 				36F5E5052E50E005000018 /* Resources */,
 				36984D6C2E45DB6E00CDC79C /* ContextUsageIndicator.swift */,
 				3658A6212DF9E89C00254350 /* SettingsView.swift */,
+				36F6A1042E50F004000104 /* ModelPickerView.swift */,
+				36F6A1052E50F005000105 /* AddModelView.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -225,6 +266,13 @@
 				36984D692E45DB6D00CDC79C /* AFMEntitlements.swift */,
 				36984D662E45DB6C00CDC79C /* AFMModelCatalog.swift */,
 				36984D5C2E45DB6A00CDC79C /* LLMTypes.swift */,
+				36F6A1012E50F001000101 /* MLXModelFactory.swift */,
+				36F6A1082E50F008000108 /* MLXRuntime.swift */,
+				36F6A1092E50F009000109 /* MLXTokenStream.swift */,
+				36F6A1022E50F002000102 /* HuggingFaceModelCatalog.swift */,
+				36F6A1032E50F003000103 /* DownloadedModelStore.swift */,
+				36F6A1072E50F007000107 /* ModelLab.swift */,
+				36F6A1062E50F006000106 /* ModelDownloadManager.swift */,
 			);
 			path = LLM;
 			sourceTree = "<group>";
@@ -280,6 +328,12 @@
 			name = "afm-chat";
 			packageProductDependencies = (
 				3658A65B2DF9ED3E00254350 /* MarkdownUI */,
+				36F6A2102E50F110000210 /* MLXFoundationModels */,
+				36F6A2112E50F111000211 /* MLXLLM */,
+				36F6A2122E50F112000212 /* MLXVLM */,
+				36F6A2132E50F113000213 /* MLXHuggingFace */,
+				36F6A2142E50F114000214 /* HuggingFace */,
+				36F6A2152E50F115000215 /* Tokenizers */,
 			);
 			productName = "afm-chat";
 			productReference = 36A7A3FC2DF923BC00B52461 /* afm-chat.app */;
@@ -335,6 +389,9 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				3658A65A2DF9ED3E00254350 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				36F6A2002E50F100000200 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				36F6A2012E50F101000201 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
+				36F6A2022E50F102000202 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			preferredProjectObjectVersion = 100;
 			productRefGroup = 36A7A3FD2DF923BC00B52461 /* Products */;
@@ -395,6 +452,15 @@
 				36CBE6392E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
 				3658A65E2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 				36984D6B2E45DB6E00CDC79C /* ContextUsageIndicator.swift in Sources */,
+				36F6A1112E50F011000111 /* MLXModelFactory.swift in Sources */,
+				36F6A1182E50F018000118 /* MLXRuntime.swift in Sources */,
+				36F6A1192E50F019000119 /* MLXTokenStream.swift in Sources */,
+				36F6A1122E50F012000112 /* HuggingFaceModelCatalog.swift in Sources */,
+				36F6A1132E50F013000113 /* DownloadedModelStore.swift in Sources */,
+				36F6A1142E50F014000114 /* ModelPickerView.swift in Sources */,
+				36F6A1152E50F015000115 /* AddModelView.swift in Sources */,
+				36F6A1162E50F016000116 /* ModelDownloadManager.swift in Sources */,
+				36F6A1172E50F017000117 /* ModelLab.swift in Sources */,
 			);
 		};
 		36D70A002DF9482B006889A7 /* Sources */ = {
@@ -427,6 +493,15 @@
 				36CBE6382E0B94E300FE3FD4 /* JavaScriptTool.swift in Sources */,
 				3658A65F2DF9EE1A00254350 /* ChatManager.swift in Sources */,
 				36984D6D2E45DB6E00CDC79C /* ContextUsageIndicator.swift in Sources */,
+				36F6A1212E50F021000121 /* MLXModelFactory.swift in Sources */,
+				36F6A1282E50F028000128 /* MLXRuntime.swift in Sources */,
+				36F6A1292E50F029000129 /* MLXTokenStream.swift in Sources */,
+				36F6A1222E50F022000122 /* HuggingFaceModelCatalog.swift in Sources */,
+				36F6A1232E50F023000123 /* DownloadedModelStore.swift in Sources */,
+				36F6A1242E50F024000124 /* ModelPickerView.swift in Sources */,
+				36F6A1252E50F025000125 /* AddModelView.swift in Sources */,
+				36F6A1262E50F026000126 /* ModelDownloadManager.swift in Sources */,
+				36F6A1272E50F027000127 /* ModelLab.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */
@@ -628,6 +703,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "AFM_MLX $(inherited)";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -682,6 +758,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "AFM_MLX $(inherited)";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -805,6 +882,30 @@
 				minimumVersion = 2.4.1;
 			};
 		};
+		36F6A2002E50F100000200 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		36F6A2012E50F101000201 /* XCRemoteSwiftPackageReference "swift-huggingface" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-huggingface";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+		36F6A2022E50F102000202 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -817,6 +918,36 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 3658A65A2DF9ED3E00254350 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		36F6A2102E50F110000210 /* MLXFoundationModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 36F6A2002E50F100000200 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXFoundationModels;
+		};
+		36F6A2112E50F111000211 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 36F6A2002E50F100000200 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		36F6A2122E50F112000212 /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 36F6A2002E50F100000200 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXVLM;
+		};
+		36F6A2132E50F113000213 /* MLXHuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 36F6A2002E50F100000200 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXHuggingFace;
+		};
+		36F6A2142E50F114000214 /* HuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 36F6A2012E50F101000201 /* XCRemoteSwiftPackageReference "swift-huggingface" */;
+			productName = HuggingFace;
+		};
+		36F6A2152E50F115000215 /* Tokenizers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 36F6A2022E50F102000202 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Tokenizers;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

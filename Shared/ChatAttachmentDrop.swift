@@ -15,6 +15,14 @@ enum ChatAttachmentDrop {
         .png,
         .heic,
         .gif,
+        .movie,
+        .mpeg4Movie,
+        .quickTimeMovie,
+        .video,
+        .audiovisualContent,
+        .audio,
+        .mp3,
+        .wav,
         .pdf,
         .plainText,
         .data,
@@ -45,10 +53,10 @@ enum ChatAttachmentDrop {
     @MainActor
     private static func importFileURL(_ url: URL, into chatManager: ChatManager) {
         let label = url.lastPathComponent.isEmpty ? "attachment" : url.lastPathComponent
-        let kind: ChatMessageAttachmentKind = ChatAttachments.isImageAttachment(
+        let kind = ChatAttachments.kind(
             mimeType: ChatAttachments.mimeType(for: url),
             fileURL: url
-        ) ? .image : .file
+        )
         chatManager.addPendingAttachment(from: url, label: label, kind: kind)
     }
 

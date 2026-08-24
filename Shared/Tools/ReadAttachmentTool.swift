@@ -15,7 +15,7 @@ struct AttachmentRegistry: Sendable {
         var exact: [String: ChatMessageAttachment] = [:]
         var lowercase: [String: ChatMessageAttachment] = [:]
 
-        for attachment in attachments where !attachment.isModelSupportedImage {
+        for attachment in attachments where !attachment.isModelSupportedImage && !attachment.isAudio && !attachment.isVideo {
             exact[attachment.label] = attachment
             lowercase[attachment.label.lowercased()] = attachment
         }
@@ -39,7 +39,7 @@ struct AttachmentRegistry: Sendable {
 /// Reads text content from user-attached non-image files in the current chat.
 struct ReadAttachmentTool: Tool {
     let name = "Read Attachment"
-    let description = "Read the text content of a file the user attached to this chat. Use when the user asks about attached documents, code, data, PDFs, or audio recordings (transcribed on device). Supported formats include plain text, markdown, JSON, CSV, code files, PDF, and audio."
+    let description = "Read the text content of a file the user attached to this chat. Use when the user asks about attached documents, code, data, or PDFs. Supported formats include plain text, markdown, JSON, CSV, code files, and PDF."
 
     private let registry: AttachmentRegistry
 
@@ -82,7 +82,7 @@ struct ReadAttachmentTool: Tool {
         let offset = arguments.offset ?? 0
         let maxCharacters = arguments.maxCharacters ?? ChatAttachmentReader.defaultMaxCharacters
 
-        if ChatAttachmentTranscriber.isAudioAttachment(attachment) {
+        if ChatAttachmentTranscriber.isTranscribable(attachment) {
             switch await ChatAttachmentTranscriber.transcribe(attachment: attachment) {
             case .success(let transcript):
                 let result = ChatAttachmentReader.paginateText(

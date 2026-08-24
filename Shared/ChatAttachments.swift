@@ -3,6 +3,7 @@
 //  Shared
 //
 
+import AVFoundation
 import Foundation
 import UniformTypeIdentifiers
 
@@ -88,12 +89,70 @@ enum ChatAttachments {
         return destination
     }
 
+    static func kind(mimeType: String?, fileURL: URL) -> ChatMessageAttachmentKind {
+        if isImageAttachment(mimeType: mimeType, fileURL: fileURL) {
+            return .image
+        }
+        if isVideoAttachment(mimeType: mimeType, fileURL: fileURL) {
+            return .video
+        }
+        if isAudioAttachment(mimeType: mimeType, fileURL: fileURL) {
+            return .audio
+        }
+        return .file
+    }
+
     static func isImageAttachment(mimeType: String?, fileURL: URL) -> Bool {
         if let mimeType, mimeType.hasPrefix("image/") {
             return true
         }
         let ext = fileURL.pathExtension.lowercased()
-        return ["jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "bmp", "tiff", "tif"].contains(ext)
+        return imageExtensions.contains(ext)
+    }
+
+    static func isVideoAttachment(mimeType: String?, fileURL: URL) -> Bool {
+        if let mimeType {
+            if mimeType.hasPrefix("video/") { return true }
+            if mimeType.hasPrefix("audio/") || mimeType.hasPrefix("image/") { return false }
+        }
+
+        let ext = fileURL.pathExtension.lowercased()
+        if ambiguousAVExtensions.contains(ext) {
+            if let hasVideo = hasTrack(at: fileURL, mediaType: .video) {
+                return hasVideo
+            }
+            return true
+        }
+        if videoExtensions.contains(ext) {
+            return true
+        }
+        if let type = UTType(filenameExtension: ext) {
+            if type.conforms(to: .audio) { return false }
+            if type.conforms(to: .movie) || type.conforms(to: .video) {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func isAudioAttachment(mimeType: String?, fileURL: URL) -> Bool {
+        if isVideoAttachment(mimeType: mimeType, fileURL: fileURL) {
+            return false
+        }
+        if let mimeType, mimeType.hasPrefix("audio/") {
+            return true
+        }
+        let ext = fileURL.pathExtension.lowercased()
+        if audioExtensions.contains(ext) {
+            return true
+        }
+        if ambiguousAVExtensions.contains(ext), hasTrack(at: fileURL, mediaType: .audio) == true {
+            return true
+        }
+        if let type = UTType(filenameExtension: ext), type.conforms(to: .audio) {
+            return true
+        }
+        return false
     }
 
     static func mimeType(for fileURL: URL) -> String? {
@@ -101,5 +160,29 @@ enum ChatAttachments {
             return type.preferredMIMEType
         }
         return nil
+    }
+
+    private static let imageExtensions: Set<String> = [
+        "jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "bmp", "tiff", "tif"
+    ]
+
+    private static let videoExtensions: Set<String> = [
+        "mov", "m4v", "avi", "mkv", "webm", "3gp", "3gpp"
+    ]
+
+    private static let audioExtensions: Set<String> = [
+        "m4a", "mp3", "wav", "caf", "aiff", "aif", "aac", "flac", "mpga", "oga", "ogg"
+    ]
+
+    /// Containers that may be audio-only or have a video track.
+    private static let ambiguousAVExtensions: Set<String> = [
+        "mp4", "mpeg", "mpg", "m4p"
+    ]
+
+    private static func hasTrack(at fileURL: URL, mediaType: AVMediaType) -> Bool? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+        let asset = AVURLAsset(url: fileURL)
+        let tracks = asset.tracks(withMediaType: mediaType)
+        return !tracks.isEmpty
     }
 }
