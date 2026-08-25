@@ -256,6 +256,7 @@ final class ModelDownloadManager: ObservableObject {
                 pipelineTag: item.pipelineTag,
                 tags: item.tags,
                 createdAt: nil,
+                lastModified: nil,
                 trendingScore: nil,
                 sizeBytes: item.totalBytes > 0 ? item.totalBytes : nil
             )
@@ -513,6 +514,128 @@ private struct DownloadProgressSmoother {
         }
 
         return (maxCompleted, maxTotal, rate)
+    }
+}
+
+struct ModelHubDownloadButton: View {
+    let model: HuggingFaceModelSummary
+
+    @ObservedObject private var downloadedStore = DownloadedModelStore.shared
+    @ObservedObject private var downloads = ModelDownloadManager.shared
+    @State private var isCheckingSize = false
+    @State private var sizeCheckTask: Task<Void, Never>?
+    @State private var pendingDownloadWarning: PendingModelDownloadWarning?
+
+    var body: some View {
+        Group {
+            if downloadedStore.contains(model.id) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .accessibilityLabel("Downloaded")
+            } else if let download = downloads.item(for: model.id), download.isInFlight {
+                ProgressView()
+            } else if isCheckingSize {
+                ProgressView()
+            } else if let download = downloads.item(for: model.id), case .failed = download.status {
+                Button("Retry") {
+                    downloads.retry(model.id)
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button("Download") {
+                    requestDownload()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .confirmationDialog(
+            Text(pendingDownloadWarning?.title ?? "This model may not run well"),
+            isPresented: Binding(
+                get: { pendingDownloadWarning != nil },
+                set: { if !$0 { pendingDownloadWarning = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Download Anyway") {
+                if let model = pendingDownloadWarning?.model {
+                    downloads.enqueue(model)
+                }
+                pendingDownloadWarning = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDownloadWarning = nil
+            }
+        } message: {
+            if let pendingDownloadWarning {
+                Text(pendingDownloadWarning.message)
+            }
+        }
+        .onDisappear {
+            sizeCheckTask?.cancel()
+        }
+    }
+
+    private func requestDownload() {
+        sizeCheckTask?.cancel()
+        isCheckingSize = true
+        sizeCheckTask = Task {
+            let size = await resolvedSize()
+            guard !Task.isCancelled else { return }
+            isCheckingSize = false
+            let resolved = modelWithSize(model, size: size)
+            let warnMemory = ModelMemoryFit.shouldWarn(modelBytes: size)
+            let warnStorage = ModelStorageFit.shouldWarn(modelBytes: size)
+            if warnMemory || warnStorage {
+                pendingDownloadWarning = PendingModelDownloadWarning(
+                    model: resolved,
+                    memory: warnMemory,
+                    storage: warnStorage
+                )
+            } else {
+                downloads.enqueue(resolved)
+            }
+        }
+    }
+
+    private func resolvedSize() async -> Int64? {
+        if let size = model.sizeBytes, size > 0 {
+            return size
+        }
+        return await HuggingFaceModelCatalog.repositorySize(id: model.id)
+    }
+
+    private func modelWithSize(_ model: HuggingFaceModelSummary, size: Int64?) -> HuggingFaceModelSummary {
+        model.withSizeBytes(size ?? model.sizeBytes)
+    }
+}
+
+private struct PendingModelDownloadWarning {
+    let model: HuggingFaceModelSummary
+    let memory: Bool
+    let storage: Bool
+
+    var title: String {
+        if storage && memory {
+            return "This model may not fit this device"
+        }
+        if storage {
+            return "Not enough storage"
+        }
+        return "This model may not run well"
+    }
+
+    var message: String {
+        guard let sizeBytes = model.sizeBytes, sizeBytes > 0 else {
+            return "This model may not run well on this device."
+        }
+        var parts: [String] = []
+        if storage {
+            parts.append(ModelStorageFit.warningMessage(modelBytes: sizeBytes))
+        }
+        if memory {
+            parts.append(ModelMemoryFit.warningMessage(modelBytes: sizeBytes))
+        }
+        return parts.joined(separator: "\n\n")
     }
 }
 

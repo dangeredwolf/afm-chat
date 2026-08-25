@@ -241,13 +241,6 @@ enum AFMModelCatalog {
             }
         }
 
-        for model in DownloadedModelStore.storedModels() {
-            let choice = LLMModelChoice.mlx(id: model.id)
-            if let size = try? await contextSize(for: choice) {
-                sizes[choice] = size
-            }
-        }
-
         return sizes
     }
 }

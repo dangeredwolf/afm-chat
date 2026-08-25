@@ -841,6 +841,7 @@ private final class MLXSession: LLMSession {
     private let configuration: LLMSessionConfiguration
     private let enabledToolIDs: [AppToolID]
     private let attachmentRegistry: AttachmentRegistry?
+    private let usage = MLXUsageTracker()
 
     init(
         modelID: String,
@@ -854,6 +855,39 @@ private final class MLXSession: LLMSession {
         self.configuration = configuration
         self.enabledToolIDs = enabledToolIDs
         self.attachmentRegistry = attachmentRegistry
+    }
+
+    func currentContextUsage(contextLimit: Int) -> LLMContextUsage? {
+        usage.snapshot(contextLimit: contextLimit, model: configuration.model)
+    }
+
+    func prepareContextUsage(contextLimit: Int) async -> LLMContextUsage? {
+        if let existing = usage.snapshot(contextLimit: contextLimit, model: configuration.model) {
+            return existing
+        }
+        guard !configuration.history.isEmpty else { return nil }
+
+        let modelID = self.modelID
+        let instructions = self.instructions
+        let history = configuration.history
+        let thinkingEnabled = configuration.thinkingEnabled
+        let enabledToolIDs = self.enabledToolIDs
+        let usageTracker = usage
+        let promptTokens = await Task.detached {
+            await MLXTokenStream.measurePromptTokens(
+                modelID: modelID,
+                instructions: instructions,
+                history: history,
+                prompt: nil,
+                thinkingEnabled: thinkingEnabled,
+                enabledToolIDs: enabledToolIDs
+            )
+        }.value
+        guard !usageTracker.hasMeasurement, let promptTokens, promptTokens > 0 else {
+            return usageTracker.snapshot(contextLimit: contextLimit, model: configuration.model)
+        }
+        usageTracker.apply(inputTokens: promptTokens)
+        return usageTracker.snapshot(contextLimit: contextLimit, model: configuration.model)
     }
 
     func respond(to prompt: String, temperature: Double) async throws -> String {
@@ -879,7 +913,8 @@ private final class MLXSession: LLMSession {
             maxOutputTokens: configuration.maxOutputTokens,
             generationSeed: configuration.generationSeed,
             enabledToolIDs: enabledToolIDs,
-            attachmentRegistry: attachmentRegistry
+            attachmentRegistry: attachmentRegistry,
+            usage: usage
         )
     }
 }

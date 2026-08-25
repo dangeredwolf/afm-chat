@@ -43,12 +43,25 @@ enum MLXModelFactory {
 
     static func evict(id: String, pipelineTag: String? = nil) async {
         await ContainerCache.shared.evict(id: id)
+        await TokenizerCache.shared.evict(id: id)
         clearGPUBufferCache()
     }
 
     static func evictAllResidentWeights() async {
         await ContainerCache.shared.evictAll()
         clearGPUBufferCache()
+    }
+
+    static func cachedContainer(id: String) async -> ModelContainer? {
+        await ContainerCache.shared.peek(id)
+    }
+
+    /// Tokenizer only — does not load model weights. Prefers a resident container.
+    static func tokenizer(id: String) async throws -> any MLXLMCommon.Tokenizer {
+        if let container = await cachedContainer(id: id) {
+            return await container.tokenizer
+        }
+        return try await TokenizerCache.shared.tokenizer(id: id)
     }
 
     private static func loadUncachedContainer(
@@ -446,6 +459,16 @@ enum MLXModelFactory {
                 configuration.reasoningConfig = Gemma4Chat.reasoningConfig
             }
         }
+        if HuggingFaceModelCatalog.looksLikeGptOss(id: id) {
+            configuration.extraEOSTokens.formUnion(["<|return|>", "<|call|>"])
+            if let existing = configuration.stopStrings {
+                configuration.stopStrings = existing.union(["<|return|>", "<|call|>"])
+            }
+            // ChatSession's public stream drops Harmony analysis. Keep the
+            // tagged decode path so the app can split analysis vs final.
+            configuration.toolCallFormat = .json
+            configuration.reasoningConfig = nil
+        }
         return configuration
     }
 
@@ -493,6 +516,10 @@ enum MLXModelFactory {
             }
         }
 
+        func peek(_ id: String) -> ModelContainer? {
+            containers[id]
+        }
+
         func evict(id: String) {
             loading[id]?.cancel()
             loading[id] = nil
@@ -506,6 +533,68 @@ enum MLXModelFactory {
             loading.removeAll()
             containers.removeAll()
         }
+    }
+
+    private actor TokenizerCache {
+        static let shared = TokenizerCache()
+
+        private var tokenizers: [String: any MLXLMCommon.Tokenizer] = [:]
+        private var loading: [String: Task<any MLXLMCommon.Tokenizer, Error>] = [:]
+
+        func tokenizer(id: String) async throws -> any MLXLMCommon.Tokenizer {
+            if let existing = tokenizers[id] {
+                return existing
+            }
+            if let task = loading[id] {
+                return try await task.value
+            }
+
+            let task = Task {
+                try await loadTokenizerFromDisk(id: id)
+            }
+            loading[id] = task
+            do {
+                let tokenizer = try await task.value
+                loading[id] = nil
+                tokenizers[id] = tokenizer
+                return tokenizer
+            } catch {
+                loading[id] = nil
+                throw error
+            }
+        }
+
+        func evict(id: String) {
+            loading[id]?.cancel()
+            loading[id] = nil
+            tokenizers[id] = nil
+        }
+    }
+
+    private static func loadTokenizerFromDisk(id: String) async throws -> any MLXLMCommon.Tokenizer {
+        let loader = #huggingFaceTokenizerLoader()
+        var directories: [URL] = []
+        if let weights = HuggingFaceCache.weightsDirectory(for: id) {
+            directories.append(weights)
+        }
+        if let snapshot = HuggingFaceCache.snapshotDirectory(for: id),
+           !directories.contains(where: { $0.standardizedFileURL.path == snapshot.standardizedFileURL.path }) {
+            directories.append(snapshot)
+        }
+
+        var lastError: Error?
+        for directory in directories {
+            do {
+                return try await loader.load(from: directory)
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? TokenizerLoadError.notFound(id)
+    }
+
+    private enum TokenizerLoadError: Error {
+        case notFound(String)
     }
     #endif
 }
@@ -523,6 +612,21 @@ nonisolated enum Gemma4Chat {
         promptStrategy: .templateFlag(key: "enable_thinking", defaultOn: false),
         isSpecialToken: true,
         implicitEndDelimiters: ["<|tool_call>"]
+    )
+}
+
+/// GPT-OSS Harmony thinking is channel-framed, not `<think>` tags.
+///
+/// The public ChatSession stream drops the analysis channel, so this config is
+/// only used to avoid the Qwen `enable_thinking` fallback. Channel splitting
+/// happens in ``HarmonyChannelEmitter``.
+nonisolated enum HarmonyChat {
+    static let reasoningConfig = ReasoningConfig(
+        startDelimiter: "<|channel|>analysis",
+        endDelimiter: "<|end|>",
+        promptStrategy: .none,
+        isSpecialToken: true,
+        implicitEndDelimiters: ["<|start|>", "<|channel|>", "<|return|>", "<|call|>"]
     )
 }
 #endif

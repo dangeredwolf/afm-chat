@@ -36,6 +36,9 @@ class ChatManager: ObservableObject {
     private var cachedContextLimit: Int?
     private var generationTask: Task<Void, Never>?
     private var generationEpoch: UInt64 = 0
+    #if AFM_MLX
+    private var contextUsageResolutionTask: Task<Void, Never>?
+    #endif
 
     private static let systemPromptDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -919,7 +922,13 @@ class ChatManager: ObservableObject {
     private func loadContextWindowMetadata(for model: LLMModelChoice) async {
         let sizes = await AFMModelCatalog.allContextSizes()
         contextWindowSizes = sizes
-        cachedContextLimit = sizes[model]
+        if let size = sizes[model] {
+            cachedContextLimit = size
+        } else if let size = try? await AFMModelCatalog.contextSize(for: model) {
+            cachedContextLimit = size
+        } else {
+            cachedContextLimit = nil
+        }
         refreshContextUsage()
     }
 
@@ -930,6 +939,28 @@ class ChatManager: ObservableObject {
         }
 
         contextUsage = currentSession.currentContextUsage(contextLimit: limit)
+        scheduleContextUsageResolution(limit: limit)
+    }
+
+    private func scheduleContextUsageResolution(limit: Int) {
+        if let usage = contextUsage, usage.usedTokens > 0 {
+            return
+        }
+        #if AFM_MLX
+        guard currentModel.mlxModelID != nil else { return }
+
+        contextUsageResolutionTask?.cancel()
+        let chatId = currentChatId
+        contextUsageResolutionTask = Task { [weak self] in
+            guard let self else { return }
+            guard let usage = await self.currentSession.prepareContextUsage(contextLimit: limit) else { return }
+            guard self.currentChatId == chatId else { return }
+            if let current = self.contextUsage, current.usedTokens >= usage.usedTokens {
+                return
+            }
+            self.contextUsage = usage
+        }
+        #endif
     }
     
     private func updateStoredChat(_ chat: Chat) {

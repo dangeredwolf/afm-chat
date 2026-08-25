@@ -124,12 +124,18 @@ private struct ContextUsageDetailsView: View {
 
     private var sortedContextWindowEntries: [(model: LLMModelChoice, limit: Int)] {
         contextWindowSizes
+            .filter { entry in
+                switch entry.key {
+                case .onDevice, .privateCloudCompute:
+                    return true
+                case .mlx:
+                    return false
+                }
+            }
             .map { (model: $0.key, limit: $0.value) }
             .sorted { lhs, rhs in
                 if lhs.model == .onDevice { return true }
                 if rhs.model == .onDevice { return false }
-                if case .privateCloudCompute = lhs.model { return true }
-                if case .privateCloudCompute = rhs.model { return false }
                 return lhs.model.displayName < rhs.model.displayName
             }
     }

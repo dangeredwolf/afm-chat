@@ -28,6 +28,7 @@ struct HuggingFaceModelSummary: Identifiable, Hashable, Sendable {
     let pipelineTag: String?
     let tags: [String]
     let createdAt: Date?
+    let lastModified: Date?
     let trendingScore: Double?
     let sizeBytes: Int64?
 
@@ -46,6 +47,20 @@ struct HuggingFaceModelSummary: Identifiable, Hashable, Sendable {
     var mediaCapabilities: LLMMediaCapabilities {
         HuggingFaceModelCatalog.mediaCapabilities(id: id, pipelineTag: pipelineTag, tags: tags)
     }
+
+    func withSizeBytes(_ sizeBytes: Int64?) -> HuggingFaceModelSummary {
+        HuggingFaceModelSummary(
+            id: id,
+            downloads: downloads,
+            likes: likes,
+            pipelineTag: pipelineTag,
+            tags: tags,
+            createdAt: createdAt,
+            lastModified: lastModified,
+            trendingScore: trendingScore,
+            sizeBytes: sizeBytes
+        )
+    }
 }
 
 nonisolated struct HuggingFaceRepositoryFile: Sendable, Hashable {
@@ -59,6 +74,53 @@ nonisolated struct HuggingFaceDownloadPlan: Sendable {
 
     var totalBytes: Int64 {
         files.reduce(Int64(0)) { $0 + $1.size }
+    }
+}
+
+struct HuggingFaceModelDetails: Hashable, Sendable {
+    let summary: HuggingFaceModelSummary
+    let libraryName: String?
+    let license: String?
+    let modelType: String?
+    let architectures: [String]
+    let parameterCount: Int64?
+    let tensorTypes: [String]
+    let files: [HuggingFaceRepositoryFile]
+    let weightsSubpath: String?
+
+    var sizeBytes: Int64 {
+        files.reduce(Int64(0)) { $0 + $1.size }
+    }
+
+    var parameterCountText: String? {
+        guard let parameterCount, parameterCount > 0 else { return nil }
+        return HuggingFaceModelCatalog.formatParameterCount(parameterCount)
+    }
+}
+
+enum HuggingFaceModelDateFormat {
+    static func updatedLabel(_ date: Date) -> String {
+        "Updated \(relativeOrAbsolute(date))"
+    }
+
+    static func relativeOrAbsolute(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return "today"
+        }
+        if calendar.isDateInYesterday(date) {
+            return "yesterday"
+        }
+        let start = calendar.startOfDay(for: date)
+        let today = calendar.startOfDay(for: Date())
+        if let days = calendar.dateComponents([.day], from: start, to: today).day, (2..<7).contains(days) {
+            return "\(days) days ago"
+        }
+        return absolute(date)
+    }
+
+    static func absolute(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .omitted)
     }
 }
 
@@ -153,8 +215,14 @@ enum HuggingFaceModelCatalog {
         let videoFromType = modelType.map { videoModelTypes.contains($0) } ?? false
         let videoFromID = looksLikeVideoModel(id: id)
         let audio = modelType.map { audioModelTypes.contains($0) } ?? false
-        let video = videoFromType || videoFromID
-        let vision = visionFromTag || visionFromType || visionFromID || video || audio
+        var video = videoFromType || videoFromID
+        var vision = visionFromTag || visionFromType || visionFromID || video || audio
+        // Qwen 3.5 text checkpoints (Ornith 1.5, …) reuse `qwen3_5` / `qwen3_5_moe`
+        // without `vision_config`. The VLM decoder requires that field.
+        if HuggingFaceCache.hasVisionConfig(for: id) == false {
+            vision = false
+            video = false
+        }
         let isSmol = modelType == "smolvlm" || id.lowercased().contains("smolvlm")
         return LLMMediaCapabilities(
             vision: vision,
@@ -200,6 +268,16 @@ enum HuggingFaceModelCatalog {
         }
         let lowered = id.lowercased()
         return lowered.contains("gemma-4") || lowered.contains("gemma4")
+    }
+
+    /// GPT-OSS Harmony models. They think on the `analysis` channel, not `<think>` tags.
+    nonisolated static func looksLikeGptOss(id: String) -> Bool {
+        if let modelType = HuggingFaceCache.modelType(for: id)?.lowercased(),
+           modelType == "gpt_oss" || modelType == "gpt-oss" {
+            return true
+        }
+        let lowered = id.lowercased()
+        return lowered.contains("gpt-oss") || lowered.contains("gpt_oss") || lowered.contains("gptoss")
     }
 
     /// DeepSeek-R1 and distills cannot turn thinking off.
@@ -259,21 +337,50 @@ enum HuggingFaceModelCatalog {
     }
 
     static func model(id: String) async throws -> HuggingFaceModelSummary {
-        let url = endpoint.appending(path: id)
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("afm-chat", forHTTPHeaderField: "User-Agent")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw URLError(.badServerResponse)
-        }
-
-        let payload = try JSONDecoder().decode(HubModelPayload.self, from: data)
+        let payload = try await fetchModelPayload(id: id)
         guard let summary = summary(from: payload, fallbackID: id) else {
             throw URLError(.cannotParseResponse)
         }
         return summary
+    }
+
+    static func details(id: String) async throws -> HuggingFaceModelDetails {
+        async let payloadTask = fetchModelPayload(id: id)
+        async let planTask = optionalDownloadPlan(id: id)
+        let payload = try await payloadTask
+        let plan = await planTask
+        guard let details = details(from: payload, plan: plan, fallbackID: id) else {
+            throw URLError(.cannotParseResponse)
+        }
+        return details
+    }
+
+    /// Raw model-card markdown, or `nil` when the repo has no README.
+    static func readme(id: String) async throws -> String? {
+        guard let url = hubURL(id: id, pathComponents: ["raw", "main", "README.md"]) else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("text/markdown, text/plain;q=0.9, */*;q=0.8", forHTTPHeaderField: "Accept")
+        request.setValue("afm-chat", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse {
+            if http.statusCode == 404 {
+                return nil
+            }
+            if !(200..<300).contains(http.statusCode) {
+                throw URLError(.badServerResponse)
+            }
+        }
+
+        guard let raw = String(data: data, encoding: .utf8) else {
+            throw URLError(.cannotParseResponse)
+        }
+        let markdown = rewriteRelativeMarkdownURLs(stripYAMLFrontMatter(raw), repoID: id)
+        let trimmed = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : markdown
     }
 
     static func unresolvedSummary(id: String) -> HuggingFaceModelSummary {
@@ -284,9 +391,44 @@ enum HuggingFaceModelCatalog {
             pipelineTag: nil,
             tags: [],
             createdAt: nil,
+            lastModified: nil,
             trendingScore: nil,
             sizeBytes: nil
         )
+    }
+
+    static func formatParameterCount(_ count: Int64) -> String {
+        let value = Double(count)
+        let billion = 1_000_000_000.0
+        let million = 1_000_000.0
+        if value >= billion {
+            let billions = value / billion
+            if billions >= 10 {
+                return "\(Int(billions.rounded()))B"
+            }
+            let tenths = (billions * 10).rounded() / 10
+            if tenths == tenths.rounded() {
+                return "\(Int(tenths))B"
+            }
+            return String(format: "%.1fB", tenths)
+        }
+        if value >= million {
+            return "\(Int((value / million).rounded()))M"
+        }
+        return count.formatted()
+    }
+
+    private static func fetchModelPayload(id: String) async throws -> HubModelPayload {
+        let url = endpoint.appending(path: id)
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("afm-chat", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(HubModelPayload.self, from: data)
     }
 
     private static func summary(from payload: HubModelPayload, fallbackID: String? = nil) -> HuggingFaceModelSummary? {
@@ -299,9 +441,39 @@ enum HuggingFaceModelCatalog {
             pipelineTag: payload.pipelineTag,
             tags: payload.tags ?? [],
             createdAt: payload.createdAt.flatMap(parseHubDate),
+            lastModified: payload.lastModified.flatMap(parseHubDate),
             trendingScore: payload.trendingScore,
             sizeBytes: nil
         )
+    }
+
+    private static func details(
+        from payload: HubModelPayload,
+        plan: HuggingFaceDownloadPlan?,
+        fallbackID: String?
+    ) -> HuggingFaceModelDetails? {
+        guard let summary = summary(from: payload, fallbackID: fallbackID) else { return nil }
+        let files = (plan?.files ?? []).sorted {
+            $0.path.localizedStandardCompare($1.path) == .orderedAscending
+        }
+        let sizeBytes = plan.flatMap { $0.totalBytes > 0 ? $0.totalBytes : nil }
+        let parameters = payload.safetensors?.parameters ?? [:]
+        let parameterTotal = payload.safetensors?.total ?? parameters.values.reduce(0, +)
+        return HuggingFaceModelDetails(
+            summary: summary.withSizeBytes(sizeBytes),
+            libraryName: payload.libraryName,
+            license: payload.license,
+            modelType: payload.config?.modelType,
+            architectures: payload.config?.architectures ?? [],
+            parameterCount: parameterTotal > 0 ? parameterTotal : nil,
+            tensorTypes: parameters.keys.sorted(),
+            files: files,
+            weightsSubpath: plan?.weightsSubpath
+        )
+    }
+
+    nonisolated private static func optionalDownloadPlan(id: String) async -> HuggingFaceDownloadPlan? {
+        try? await downloadPlan(id: id)
     }
 
     nonisolated static func repositorySize(id: String) async -> Int64? {
@@ -483,6 +655,94 @@ enum HuggingFaceModelCatalog {
         plain.formatOptions = [.withInternetDateTime]
         return plain.date(from: value)
     }
+
+    nonisolated private static func hubURL(id: String, pathComponents: [String]) -> URL? {
+        guard var url = URL(string: "https://huggingface.co") else { return nil }
+        for part in id.split(separator: "/") {
+            guard !part.isEmpty else { continue }
+            url.append(path: String(part))
+        }
+        for part in pathComponents {
+            url.append(path: part)
+        }
+        return url
+    }
+
+    nonisolated private static func stripYAMLFrontMatter(_ markdown: String) -> String {
+        var text = markdown
+        if text.hasPrefix("\u{FEFF}") {
+            text.removeFirst()
+        }
+        guard text.hasPrefix("---") else { return markdown }
+        let remainder = text.dropFirst(3)
+        guard remainder.first == "\n" || remainder.hasPrefix("\r\n") || remainder.hasPrefix(" ") || remainder.hasPrefix("\t") || remainder.isEmpty else {
+            return markdown
+        }
+        let ns = text as NSString
+        let pattern = #"\A(?:\uFEFF)?---[ \t]*\r?\n(?:(?!---).*\r?\n)*---[ \t]*\r?\n?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return markdown }
+        let range = NSRange(location: 0, length: ns.length)
+        guard let match = regex.firstMatch(in: text, options: [], range: range), match.range.length > 0 else {
+            return markdown
+        }
+        return ns.substring(from: match.range.length)
+    }
+
+    nonisolated private static func rewriteRelativeMarkdownURLs(_ markdown: String, repoID: String) -> String {
+        guard var base = hubURL(id: repoID, pathComponents: ["resolve", "main"]) else {
+            return markdown
+        }
+        if !base.absoluteString.hasSuffix("/") {
+            guard let slashed = URL(string: base.absoluteString + "/") else { return markdown }
+            base = slashed
+        }
+
+        guard let regex = try? NSRegularExpression(pattern: #"\]\(\s*([^)\s]+)([^)]*)\)"#) else {
+            return markdown
+        }
+        let ns = markdown as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        var result = ""
+        result.reserveCapacity(markdown.count)
+        var cursor = 0
+        for match in regex.matches(in: markdown, options: [], range: full) {
+            let urlRange = match.range(at: 1)
+            guard urlRange.location != NSNotFound else { continue }
+            if urlRange.location > cursor {
+                result += ns.substring(with: NSRange(location: cursor, length: urlRange.location - cursor))
+            }
+            let original = ns.substring(with: urlRange)
+            result += resolvedMarkdownURL(original, base: base)
+            cursor = urlRange.location + urlRange.length
+        }
+        if cursor < ns.length {
+            result += ns.substring(from: cursor)
+        }
+        return result
+    }
+
+    nonisolated private static func resolvedMarkdownURL(_ raw: String, base: URL) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return raw }
+        if trimmed.hasPrefix("#") { return raw }
+        if trimmed.hasPrefix("//") {
+            return "https:" + trimmed
+        }
+        if let colon = trimmed.firstIndex(of: ":") {
+            let scheme = trimmed[..<colon].lowercased()
+            if ["http", "https", "mailto", "tel", "data", "ftp"].contains(scheme) {
+                return raw
+            }
+        }
+        var path = trimmed
+        if path.hasPrefix("./") {
+            path.removeFirst(2)
+        }
+        if path.hasPrefix("/") {
+            path.removeFirst()
+        }
+        return URL(string: path, relativeTo: base)?.absoluteString ?? raw
+    }
 }
 
 private struct HubModelPayload: Decodable {
@@ -493,11 +753,20 @@ private struct HubModelPayload: Decodable {
     let pipelineTag: String?
     let tags: [String]?
     let createdAt: String?
+    let lastModified: String?
     let trendingScore: Double?
+    let libraryName: String?
+    let license: String?
+    let config: HubConfig?
+    let safetensors: HubSafetensors?
 
     enum Checkpoint: String, CodingKey {
-        case id, modelId, downloads, likes, tags, createdAt, trendingScore
+        case id, modelId, downloads, likes, tags, createdAt, lastModified, trendingScore
         case pipelineTag = "pipeline_tag"
+        case libraryName = "library_name"
+        case cardData
+        case config
+        case safetensors
     }
 
     init(from decoder: Decoder) throws {
@@ -509,7 +778,87 @@ private struct HubModelPayload: Decodable {
         pipelineTag = try container.decodeIfPresent(String.self, forKey: .pipelineTag)
         tags = try container.decodeIfPresent([String].self, forKey: .tags)
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        lastModified = try container.decodeIfPresent(String.self, forKey: .lastModified)
         trendingScore = try container.decodeIfPresent(Double.self, forKey: .trendingScore)
+        libraryName = try container.decodeIfPresent(String.self, forKey: .libraryName)
+        license = (try? container.decodeIfPresent(HubCardData.self, forKey: .cardData))?.license
+        config = try? container.decodeIfPresent(HubConfig.self, forKey: .config)
+        safetensors = try? container.decodeIfPresent(HubSafetensors.self, forKey: .safetensors)
+    }
+}
+
+private struct HubCardData: Decodable {
+    let license: String?
+
+    enum Checkpoint: String, CodingKey {
+        case license
+        case licenseName = "license_name"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Checkpoint.self)
+        if let value = try? container.decode(String.self, forKey: .license) {
+            license = value
+        } else if let values = try? container.decode([String].self, forKey: .license) {
+            license = values.first
+        } else {
+            license = try container.decodeIfPresent(String.self, forKey: .licenseName)
+        }
+    }
+}
+
+private struct HubConfig: Decodable {
+    let modelType: String?
+    let architectures: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case modelType = "model_type"
+        case architectures
+    }
+}
+
+private struct HubSafetensors: Decodable {
+    let total: Int64?
+    let parameters: [String: Int64]
+
+    enum Checkpoint: String, CodingKey {
+        case total
+        case parameters
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Checkpoint.self)
+        total = Self.decodeInt64(container, forKey: .total)
+        if let raw = try? container.decode([String: HubFlexibleInt64].self, forKey: .parameters) {
+            parameters = raw.mapValues(\.value)
+        } else {
+            parameters = [:]
+        }
+    }
+
+    private static func decodeInt64(_ container: KeyedDecodingContainer<Checkpoint>, forKey key: Checkpoint) -> Int64? {
+        if let value = try? container.decode(Int64.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decode(Double.self, forKey: key) {
+            return Int64(value)
+        }
+        return nil
+    }
+}
+
+private struct HubFlexibleInt64: Decodable {
+    let value: Int64
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(Int64.self) {
+            self.value = value
+        } else if let value = try? container.decode(Double.self) {
+            self.value = Int64(value)
+        } else {
+            self.value = 0
+        }
     }
 }
 

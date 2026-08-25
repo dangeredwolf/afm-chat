@@ -167,6 +167,15 @@ enum HuggingFaceCache {
         return object["model_type"] as? String
     }
 
+    /// `nil` when `config.json` is not on disk. `false` when the checkpoint has
+    /// no vision tower (`vision_config` missing or empty), including Qwen 3.5
+    /// text models that share a VLM `model_type`.
+    nonisolated static func hasVisionConfig(for id: String) -> Bool? {
+        guard let object = configJSON(for: id) else { return nil }
+        guard let vision = object["vision_config"] as? [String: Any] else { return false }
+        return !vision.isEmpty
+    }
+
     nonisolated private static func configJSON(for id: String) -> [String: Any]? {
         guard let directory = weightsDirectory(for: id) else { return nil }
         let configURL = directory.appendingPathComponent("config.json")

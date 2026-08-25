@@ -339,6 +339,7 @@ public protocol LLMSession {
     func streamResponse(to prompt: LLMPrompt, temperature: Double) -> AsyncThrowingStream<LLMStreamEvent, Error>
     func respond(to prompt: String, temperature: Double) async throws -> String
     func currentContextUsage(contextLimit: Int) -> LLMContextUsage?
+    func prepareContextUsage(contextLimit: Int) async -> LLMContextUsage?
 }
 
 extension LLMSession {
@@ -350,6 +351,10 @@ extension LLMSession {
 extension LLMSession {
     public func currentContextUsage(contextLimit: Int) -> LLMContextUsage? {
         nil
+    }
+
+    public func prepareContextUsage(contextLimit: Int) async -> LLMContextUsage? {
+        currentContextUsage(contextLimit: contextLimit)
     }
 }
 

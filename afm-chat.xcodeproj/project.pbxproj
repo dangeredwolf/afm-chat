@@ -79,6 +79,8 @@
 		36F6A1132E50F013000113 /* DownloadedModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1032E50F003000103 /* DownloadedModelStore.swift */; };
 		36F6A1142E50F014000114 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1042E50F004000104 /* ModelPickerView.swift */; };
 		36F6A1152E50F015000115 /* AddModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1052E50F005000105 /* AddModelView.swift */; };
+		36F9A1112E50F511000511 /* ModelReadmeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F9A1012E50F501000501 /* ModelReadmeView.swift */; };
+		36F9A2112E50F611000611 /* ModelTechnicalDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F9A2012E50F601000601 /* ModelTechnicalDetailsView.swift */; };
 		36F6A1162E50F016000116 /* ModelDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1062E50F006000106 /* ModelDownloadManager.swift */; };
 		36F6A1172E50F017000117 /* ModelLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1072E50F007000107 /* ModelLab.swift */; };
 		36F6A11A2E50F01A00011A /* ModelDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A10A2E50F00A00010A /* ModelDisplayName.swift */; };
@@ -91,6 +93,8 @@
 		36F6A1232E50F023000123 /* DownloadedModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1032E50F003000103 /* DownloadedModelStore.swift */; };
 		36F6A1242E50F024000124 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1042E50F004000104 /* ModelPickerView.swift */; };
 		36F6A1252E50F025000125 /* AddModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1052E50F005000105 /* AddModelView.swift */; };
+		36F9A1212E50F521000521 /* ModelReadmeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F9A1012E50F501000501 /* ModelReadmeView.swift */; };
+		36F9A2212E50F621000621 /* ModelTechnicalDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F9A2012E50F601000601 /* ModelTechnicalDetailsView.swift */; };
 		36F6A1262E50F026000126 /* ModelDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1062E50F006000106 /* ModelDownloadManager.swift */; };
 		36F6A1272E50F027000127 /* ModelLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A1072E50F007000107 /* ModelLab.swift */; };
 		36F6A12A2E50F02A00012A /* ModelDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F6A10A2E50F00A00010A /* ModelDisplayName.swift */; };
@@ -168,6 +172,8 @@
 		36F6A1032E50F003000103 /* DownloadedModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadedModelStore.swift; sourceTree = "<group>"; };
 		36F6A1042E50F004000104 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
 		36F6A1052E50F005000105 /* AddModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddModelView.swift; sourceTree = "<group>"; };
+		36F9A1012E50F501000501 /* ModelReadmeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelReadmeView.swift; sourceTree = "<group>"; };
+		36F9A2012E50F601000601 /* ModelTechnicalDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTechnicalDetailsView.swift; sourceTree = "<group>"; };
 		36F6A1062E50F006000106 /* ModelDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadManager.swift; sourceTree = "<group>"; };
 		36F6A1072E50F007000107 /* ModelLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLab.swift; sourceTree = "<group>"; };
 		36F6A10A2E50F00A00010A /* ModelDisplayName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDisplayName.swift; sourceTree = "<group>"; };
@@ -260,6 +266,8 @@
 				3658A6212DF9E89C00254350 /* SettingsView.swift */,
 				36F6A1042E50F004000104 /* ModelPickerView.swift */,
 				36F6A1052E50F005000105 /* AddModelView.swift */,
+				36F9A1012E50F501000501 /* ModelReadmeView.swift */,
+				36F9A2012E50F601000601 /* ModelTechnicalDetailsView.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -487,6 +495,8 @@
 				36F6A1132E50F013000113 /* DownloadedModelStore.swift in Sources */,
 				36F6A1142E50F014000114 /* ModelPickerView.swift in Sources */,
 				36F6A1152E50F015000115 /* AddModelView.swift in Sources */,
+				36F9A1112E50F511000511 /* ModelReadmeView.swift in Sources */,
+				36F9A2112E50F611000611 /* ModelTechnicalDetailsView.swift in Sources */,
 				36F6A1162E50F016000116 /* ModelDownloadManager.swift in Sources */,
 				36F6A1172E50F017000117 /* ModelLab.swift in Sources */,
 				36F6A11A2E50F01A00011A /* ModelDisplayName.swift in Sources */,
@@ -533,6 +543,8 @@
 				36F6A1232E50F023000123 /* DownloadedModelStore.swift in Sources */,
 				36F6A1242E50F024000124 /* ModelPickerView.swift in Sources */,
 				36F6A1252E50F025000125 /* AddModelView.swift in Sources */,
+				36F9A1212E50F521000521 /* ModelReadmeView.swift in Sources */,
+				36F9A2212E50F621000621 /* ModelTechnicalDetailsView.swift in Sources */,
 				36F6A1262E50F026000126 /* ModelDownloadManager.swift in Sources */,
 				36F6A1272E50F027000127 /* ModelLab.swift in Sources */,
 				36F6A12A2E50F02A00012A /* ModelDisplayName.swift in Sources */,
